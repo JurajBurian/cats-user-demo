@@ -1,0 +1,11 @@
+project/target
+target
+**/target
+**/data*
+.idea
+.bsp
+.sbtopts
+.metals
+.vscode
+.bloop
+.sc
