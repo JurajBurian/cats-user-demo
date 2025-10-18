@@ -85,8 +85,7 @@ object Main extends IOApp.Simple {
       .use { case (server, config) =>
         logger.info(s"Server started at http://${config.http.host}:${config.http.port}") *>
           logger.info(s"API documentation available at http://${config.http.host}:${config.http.port}/docs") *>
-          logger.info(s"Server binding: $server")
+          logger.info(s"Server binding: $server") *> IO.never
       }
-      .map(_ => IO.never)
   }
 }
