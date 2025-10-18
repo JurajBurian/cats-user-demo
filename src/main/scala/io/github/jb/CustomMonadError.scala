@@ -4,6 +4,8 @@ import cats.MonadError
 import cats.effect.IO
 import io.github.jb.domain.ApiError
 
+import java.sql.SQLException
+
 class CustomMonadError extends MonadError[IO, ApiError] {
   def pure[A](x: A): IO[A] = IO.pure(x)
 
@@ -17,7 +19,11 @@ class CustomMonadError extends MonadError[IO, ApiError] {
 
   def handleErrorWith[A](fa: IO[A])(f: ApiError => IO[A]): IO[A] =
     fa.handleErrorWith {
-      case apiError: ApiError => f(apiError)
-      case other: Throwable   => f(ApiError.UnknownError(other.getMessage))
+      case apiError: ApiError =>
+        f(apiError)
+      case other: SQLException =>
+        f(ApiError.UnknownError(other.getMessage))
+      case th: Throwable =>
+        IO.raiseError(th) // fatal error
     }
 }
