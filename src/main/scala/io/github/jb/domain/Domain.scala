@@ -2,9 +2,6 @@ package io.github.jb.domain
 
 import java.util.UUID
 import java.time.Instant
-import com.github.plokhotnyuk.jsoniter_scala.macros.*
-import com.github.plokhotnyuk.jsoniter_scala.core.*
-import sttp.model.StatusCode
 
 case class User(
     id: UUID,
@@ -74,16 +71,3 @@ enum ApiError(message: String) extends Throwable(message) {
 
   case UnknownError(cause: String) extends ApiError(s"Unknown error, cuse: $cause")
 }
-
-
-// JSON codecs
-given JsonValueCodec[UserCreate] = JsonCodecMaker.make
-given JsonValueCodec[UserResponse] = JsonCodecMaker.make
-given JsonValueCodec[List[UserResponse]] = JsonCodecMaker.make
-given JsonValueCodec[UserStatusUpdate] = JsonCodecMaker.make
-given JsonValueCodec[LoginRequest] = JsonCodecMaker.make
-given JsonValueCodec[Tokens] = JsonCodecMaker.make
-given JsonValueCodec[AuthResponse] = JsonCodecMaker.make
-given JsonValueCodec[AccessTokenClaims] = JsonCodecMaker.make
-given JsonValueCodec[RefreshTokenClaims] = JsonCodecMaker.make
-given JsonValueCodec[Boolean] = JsonCodecMaker.make

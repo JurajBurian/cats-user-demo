@@ -1,14 +1,15 @@
 package io.github.jb
 
+import io.github.jb.config.*
+import io.github.jb.domain.*
+import io.github.jb.service.*
+
 import cats.MonadError
 import cats.effect.{IO, IOApp, Resource}
 import doobie.hikari.HikariTransactor
 import org.typelevel.log4cats.LoggerFactory
 import org.typelevel.log4cats.slf4j.Slf4jFactory
-import io.github.jb.config.*
-import io.github.jb.domain.*
 import io.github.jb.repository.DoobieUserRepository
-import io.github.jb.service.{JwtServiceImpl, PasswordServiceImpl, UserServiceImpl}
 import io.github.jb.http.Endpoints
 import org.flywaydb.core.Flyway
 import sttp.tapir.server.netty.cats.NettyCatsServer
@@ -85,7 +86,7 @@ object Main extends IOApp.Simple {
       .use { case (server, config) =>
         logger.info(s"Server started at http://${config.http.host}:${config.http.port}") *>
           logger.info(s"API documentation available at http://${config.http.host}:${config.http.port}/docs") *>
-          logger.info(s"Server binding: $server") *> IO.never
+          IO.never
       }
   }
 }
