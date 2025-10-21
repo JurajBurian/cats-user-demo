@@ -3,9 +3,8 @@ package io.github.jb
 import io.github.jb.config.*
 import io.github.jb.domain.*
 import io.github.jb.service.*
-
-import cats.MonadError
 import cats.effect.{IO, IOApp, Resource}
+import cats.mtl.Handle
 import doobie.hikari.HikariTransactor
 import org.typelevel.log4cats.LoggerFactory
 import org.typelevel.log4cats.slf4j.Slf4jFactory
@@ -42,9 +41,10 @@ object Main extends IOApp.Simple {
     }
   }
 
-  given MonadError[IO, ApiError] = new CustomMonadError
+  given Handle[IO, ApiError] = new CustomHandle
 
   private def createUserService(xa: HikariTransactor[IO], jwt: JwtConfig, bcrypt: BcryptConfig) = {
+
     val userRepo = new DoobieUserRepository[IO](xa)
     val jwtService = new JwtServiceImpl[IO](jwt)
     val passwordService = new PasswordServiceImpl[IO](bcrypt.cost)

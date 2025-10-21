@@ -5,19 +5,19 @@ import sttp.tapir.*
 import sttp.tapir.generic.auto.*
 import sttp.tapir.json.jsoniter.jsonBody
 import sttp.tapir.server.ServerEndpoint
-import cats.{Monad, MonadError}
+import cats.Monad
 import cats.syntax.all.*
+import cats.mtl.Handle
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import io.github.jb.domain.*
 import io.github.jb.domain.given
 import io.github.jb.domain.ApiError
 import sttp.model.StatusCode
-import sttp.tapir.EndpointOutput.OneOfVariant
 
 import java.util.UUID
 
-class Endpoints[F[_]: Monad](userService: UserService[F])(using F: MonadError[F, ApiError]) {
+class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F], H: Handle[F, ApiError]) {
 
   case class ErrorResponse(error: String, message: String)
 
@@ -29,11 +29,10 @@ class Endpoints[F[_]: Monad](userService: UserService[F])(using F: MonadError[F,
   def fromApiError(error: ApiError): ErrorResponse =
     ErrorResponse(error = error.productPrefix, message = error.getMessage)
 
-  // Error handling returns ErrorResponse (not ApiError)
   private def handleServiceError[T](result: F[T]): F[Either[ErrorResponse, T]] =
-    result.attempt.map {
-      case Right(value)          => Right(value)
-      case Left(error: ApiError) => Left(fromApiError(error))
+    H.attempt(result).map {
+      case Right(value) => Right(value)
+      case Left(error)  => Left(fromApiError(error))
     }
 
   // Individual error variants - now using ErrorResponse
@@ -52,7 +51,7 @@ class Endpoints[F[_]: Monad](userService: UserService[F])(using F: MonadError[F,
   private val internalServerError =
     oneOfVariant(StatusCode.InternalServerError, jsonBody[ErrorResponse].description("Internal server error"))
 
-  // Login: InvalidCredentials, AccountDeactivated, UnknownError
+  // All endpoints remain the same - they use handleServiceError which now uses Handle
   val loginEndpoint: ServerEndpoint[Any, F] =
     endpoint.post
       .in(basePath / "auth" / "login")
@@ -67,7 +66,6 @@ class Endpoints[F[_]: Monad](userService: UserService[F])(using F: MonadError[F,
       )
       .serverLogic(loginRequest => handleServiceError(userService.login(loginRequest)))
 
-  // Refresh: InvalidRefreshToken, UserNotFound, AccountDeactivated, UnknownError
   val refreshEndpoint: ServerEndpoint[Any, F] =
     endpoint.post
       .in(basePath / "auth" / "refresh")
@@ -83,7 +81,6 @@ class Endpoints[F[_]: Monad](userService: UserService[F])(using F: MonadError[F,
       )
       .serverLogic(refreshToken => handleServiceError(userService.refreshTokens(refreshToken)))
 
-  // Create User: UserAlreadyExists, UnknownError
   val createUserEndpoint: ServerEndpoint[Any, F] =
     endpoint.post
       .in(basePath / "users")
@@ -97,7 +94,6 @@ class Endpoints[F[_]: Monad](userService: UserService[F])(using F: MonadError[F,
       )
       .serverLogic(userCreate => handleServiceError(userService.createUser(userCreate)))
 
-  // Get User: InvalidOrExpiredToken, UserNotFound, AccountDeactivated, UnknownError
   val getUserEndpoint: ServerEndpoint[Any, F] =
     endpoint.get
       .in(basePath / "users" / path[UUID]("id"))
@@ -120,7 +116,6 @@ class Endpoints[F[_]: Monad](userService: UserService[F])(using F: MonadError[F,
         }
       }
 
-  // Update User Status: InvalidOrExpiredToken, UserNotFound, UnknownError
   val updateUserStatusEndpoint: ServerEndpoint[Any, F] =
     endpoint.patch
       .in(basePath / "users" / path[UUID]("id") / "status")
@@ -143,7 +138,6 @@ class Endpoints[F[_]: Monad](userService: UserService[F])(using F: MonadError[F,
         }
       }
 
-  // List Users: InvalidOrExpiredToken, UnknownError
   val listUsersEndpoint: ServerEndpoint[Any, F] =
     endpoint.get
       .in(basePath / "users" / path[Long]("offset") / path[Long]("count") / "list")

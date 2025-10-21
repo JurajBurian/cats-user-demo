@@ -1,6 +1,7 @@
 package io.github.jb.service
 
-import cats.MonadError
+import cats.Monad
+import cats.mtl.Raise
 import cats.syntax.all.*
 import java.util.UUID
 import io.github.jb.domain.*
@@ -11,15 +12,15 @@ class UserServiceImpl[F[_]](
     userRepo: UserRepository[F],
     jwtService: JwtService[F],
     passwordService: PasswordService[F]
-)(using F: MonadError[F, ApiError]) // Using ApiError instead of Throwable
+)(using M: Monad[F], R: Raise[F, ApiError])
     extends UserService[F] {
 
   def createUser(userCreate: UserCreate): F[UserResponse] = {
     for {
       existingUser <- userRepo.findByEmail(userCreate.email)
       _ <- existingUser match {
-        case Some(_) => F.raiseError(ApiError.UserAlreadyExists(userCreate.email))
-        case None    => F.unit
+        case Some(_) => R.raise(ApiError.UserAlreadyExists(userCreate.email))
+        case None    => M.unit
       }
 
       passwordHash <- passwordService.hashPassword(userCreate.password)
@@ -31,14 +32,14 @@ class UserServiceImpl[F[_]](
     for {
       userOpt <- userRepo.findByEmail(loginRequest.email)
       user <- userOpt match {
-        case Some(user) => F.pure(user)
-        case None       => F.raiseError(ApiError.InvalidCredentials)
+        case Some(user) => user.pure[F]
+        case None       => R.raise(ApiError.InvalidCredentials)
       }
 
       _ <- validateUserStatus(user)
 
       isValid <- passwordService.verifyPassword(loginRequest.password, user.passwordHash)
-      _ <- if (!isValid) F.raiseError(ApiError.InvalidCredentials) else F.unit
+      _ <- if (!isValid) R.raise(ApiError.InvalidCredentials) else Monad[F].unit
 
       accessToken <- jwtService.generateAccessToken(user)
       refreshToken <- jwtService.generateRefreshToken(user.id)
@@ -50,14 +51,14 @@ class UserServiceImpl[F[_]](
     for {
       refreshClaimsOpt <- jwtService.validateAndExtractRefreshToken(refreshToken)
       refreshClaims <- refreshClaimsOpt match {
-        case Some(claims) => F.pure(claims)
-        case None         => F.raiseError(ApiError.InvalidRefreshToken)
+        case Some(claims) => claims.pure[F]
+        case None         => R.raise(ApiError.InvalidRefreshToken)
       }
 
       userOpt <- userRepo.findById(refreshClaims.userId)
       user <- userOpt match {
-        case Some(user) => F.pure(user)
-        case None       => F.raiseError(ApiError.UserNotFound(refreshClaims.userId))
+        case Some(user) => user.pure[F]
+        case None       => R.raise(ApiError.UserNotFound(refreshClaims.userId))
       }
 
       _ <- validateUserStatus(user)
@@ -70,8 +71,8 @@ class UserServiceImpl[F[_]](
 
   def getUser(id: UUID): F[UserResponse] = {
     userRepo.findById(id).flatMap {
-      case Some(user) => F.pure(toUserResponse(user))
-      case None       => F.raiseError(ApiError.UserNotFound(id))
+      case Some(user) => toUserResponse(user).pure[F]
+      case None       => R.raise(ApiError.UserNotFound(id))
     }
   }
 
@@ -81,14 +82,14 @@ class UserServiceImpl[F[_]](
     for {
       accessClaimsOpt <- jwtService.validateAndExtractAccessToken(token)
       accessClaims <- accessClaimsOpt match {
-        case Some(claims) => F.pure(claims)
-        case None         => F.raiseError(ApiError.InvalidOrExpiredToken)
+        case Some(claims) => claims.pure[F]
+        case None         => R.raise(ApiError.InvalidOrExpiredToken)
       }
 
       userOpt <- userRepo.findById(accessClaims.userId)
       user <- userOpt match {
-        case Some(user) => F.pure(user)
-        case None       => F.raiseError(ApiError.UserNotFound(accessClaims.userId))
+        case Some(user) => user.pure[F]
+        case None       => R.raise(ApiError.UserNotFound(accessClaims.userId))
       }
 
       _ <- validateUserStatus(user)
@@ -99,7 +100,7 @@ class UserServiceImpl[F[_]](
     userRepo.findActive(offset, count).map(_.map(toUserResponse))
 
   private def validateUserStatus(user: User): F[Unit] =
-    if (!user.isActive) F.raiseError(ApiError.AccountDeactivated) else F.unit
+    if (!user.isActive) R.raise(ApiError.AccountDeactivated) else Monad[F].unit
 
   private def toUserResponse(user: User): UserResponse =
     UserResponse(
