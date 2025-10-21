@@ -15,11 +15,13 @@ class UserServiceImpl[F[_]](
 )(using M: Monad[F], R: Raise[F, ApiError])
     extends UserService[F] {
 
+  import cats.mtl.syntax.raise.given // use sufix syntax with raise
+
   def createUser(userCreate: UserCreate): F[UserResponse] = {
     for {
       existingUser <- userRepo.findByEmail(userCreate.email)
       _ <- existingUser match {
-        case Some(_) => R.raise(ApiError.UserAlreadyExists(userCreate.email))
+        case Some(_) => ApiError.UserAlreadyExists(userCreate.email).raise
         case None    => M.unit
       }
 
@@ -33,7 +35,7 @@ class UserServiceImpl[F[_]](
       userOpt <- userRepo.findByEmail(loginRequest.email)
       user <- userOpt match {
         case Some(user) => user.pure[F]
-        case None       => R.raise(ApiError.InvalidCredentials)
+        case None       => ApiError.InvalidCredentials.raise
       }
 
       _ <- validateUserStatus(user)
@@ -52,13 +54,13 @@ class UserServiceImpl[F[_]](
       refreshClaimsOpt <- jwtService.validateAndExtractRefreshToken(refreshToken)
       refreshClaims <- refreshClaimsOpt match {
         case Some(claims) => claims.pure[F]
-        case None         => R.raise(ApiError.InvalidRefreshToken)
+        case None         => ApiError.InvalidRefreshToken.raise
       }
 
       userOpt <- userRepo.findById(refreshClaims.userId)
       user <- userOpt match {
         case Some(user) => user.pure[F]
-        case None       => R.raise(ApiError.UserNotFound(refreshClaims.userId))
+        case None       => ApiError.UserNotFound(refreshClaims.userId).raise
       }
 
       _ <- validateUserStatus(user)
@@ -72,7 +74,7 @@ class UserServiceImpl[F[_]](
   def getUser(id: UUID): F[UserResponse] = {
     userRepo.findById(id).flatMap {
       case Some(user) => toUserResponse(user).pure[F]
-      case None       => R.raise(ApiError.UserNotFound(id))
+      case None       => ApiError.UserNotFound(id).raise
     }
   }
 
@@ -83,13 +85,13 @@ class UserServiceImpl[F[_]](
       accessClaimsOpt <- jwtService.validateAndExtractAccessToken(token)
       accessClaims <- accessClaimsOpt match {
         case Some(claims) => claims.pure[F]
-        case None         => R.raise(ApiError.InvalidOrExpiredToken)
+        case None         => ApiError.InvalidOrExpiredToken.raise
       }
 
       userOpt <- userRepo.findById(accessClaims.userId)
       user <- userOpt match {
         case Some(user) => user.pure[F]
-        case None       => R.raise(ApiError.UserNotFound(accessClaims.userId))
+        case None       => ApiError.UserNotFound(accessClaims.userId).raise
       }
 
       _ <- validateUserStatus(user)
@@ -100,7 +102,7 @@ class UserServiceImpl[F[_]](
     userRepo.findActive(offset, count).map(_.map(toUserResponse))
 
   private def validateUserStatus(user: User): F[Unit] =
-    if (!user.isActive) R.raise(ApiError.AccountDeactivated) else Monad[F].unit
+    if (!user.isActive) ApiError.AccountDeactivated.raise else Monad[F].unit
 
   private def toUserResponse(user: User): UserResponse =
     UserResponse(
