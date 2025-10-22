@@ -54,10 +54,9 @@ case class AuthResponse(
 case class AccessTokenClaims(userId: UUID, email: String, username: String)
 case class RefreshTokenClaims(userId: UUID, tokenType: String = "refresh")
 
-enum ApiError(message: String) extends Throwable(message) {
+enum ApiError(val message: String) {
 
-  case UserAlreadyExists(email: String)
-      extends ApiError(s"User with this email already exists: $email")
+  case UserAlreadyExists(email: String) extends ApiError(s"User with this email already exists: $email")
 
   case InvalidCredentials extends ApiError("Invalid credentials")
 

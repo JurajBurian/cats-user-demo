@@ -27,7 +27,7 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F], H: Handle[
   private val bearerTokenHeader = auth.bearer[String]()
 
   def fromApiError(error: ApiError): ErrorResponse =
-    ErrorResponse(error = error.productPrefix, message = error.getMessage)
+    ErrorResponse(error = error.productPrefix, message = error.message)
 
   private def handleServiceError[T](result: F[T]): F[Either[ErrorResponse, T]] =
     H.attempt(result).map {
