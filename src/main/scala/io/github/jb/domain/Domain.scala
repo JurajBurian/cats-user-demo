@@ -1,5 +1,8 @@
 package io.github.jb.domain
 
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
+import com.github.plokhotnyuk.jsoniter_scala.macros.{CodecMakerConfig, JsonCodecMaker}
+
 import java.util.UUID
 import java.time.Instant
 
@@ -54,19 +57,18 @@ case class AuthResponse(
 case class AccessTokenClaims(userId: UUID, email: String, username: String)
 case class RefreshTokenClaims(userId: UUID, tokenType: String = "refresh")
 
-enum ApiError(val message: String) {
+sealed trait ApiError extends Product with Serializable {
+  def message: String
+}
 
-  case UserAlreadyExists(email: String) extends ApiError(s"User with this email already exists: $email")
+object ApiError {
 
-  case InvalidCredentials extends ApiError("Invalid credentials")
-
-  case InvalidRefreshToken extends ApiError("Invalid refresh token")
-
-  case UserNotFound(id: UUID) extends ApiError(s"User not found: $id")
-
-  case InvalidOrExpiredToken extends ApiError("Invalid or expired token")
-
-  case AccountDeactivated extends ApiError("Account has been deactivated")
-
-  case UnknownError(cause: String) extends ApiError(s"Unknown error, cuse: $cause")
+  case class UserAlreadyExists(email: String, override val message: String = "User with this email already exists")
+      extends ApiError
+  case class InvalidCredentials(override val message: String = "Invalid credentials") extends ApiError
+  case class InvalidRefreshToken(override val message: String = "Invalid refresh token") extends ApiError
+  case class UserNotFound(id: UUID, override val message: String = "User not found") extends ApiError
+  case class InvalidOrExpiredToken(override val message: String = "Invalid or expired token") extends ApiError
+  case class AccountDeactivated(override val message: String = "Account has been deactivated") extends ApiError
+  case class InternalServerError(cause: String, override val message: String = "Internal server error") extends ApiError
 }

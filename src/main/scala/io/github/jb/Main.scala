@@ -5,6 +5,7 @@ import io.github.jb.domain.*
 import io.github.jb.service.*
 import cats.effect.{IO, IOApp, Resource}
 import cats.mtl.Handle
+import com.zaxxer.hikari.HikariConfig
 import doobie.hikari.HikariTransactor
 import org.typelevel.log4cats.LoggerFactory
 import org.typelevel.log4cats.slf4j.Slf4jFactory
@@ -24,13 +25,21 @@ object Main extends IOApp.Simple {
 
   private def transactor(config: DatabaseConfig): Resource[IO, HikariTransactor[IO]] = {
     val connectEC = ExecutionContext.global
-    HikariTransactor.newHikariTransactor[IO](
-      config.driver,
-      config.url,
-      config.user,
-      config.password,
-      connectEC
-    )
+
+    val hikariConfig = {
+      val cfg = new HikariConfig()
+      cfg.setDriverClassName(config.driver)
+      cfg.setJdbcUrl(config.url)
+      cfg.setUsername(config.user)
+      cfg.setPassword(config.password)
+      cfg.setConnectionTimeout(2000)
+      cfg.setInitializationFailTimeout(2000)
+      cfg.setValidationTimeout(2000)
+      cfg.setConnectionTestQuery("SELECT 1")
+      cfg
+    }
+
+    HikariTransactor.fromHikariConfig[IO](hikariConfig)
   }
 
   private def initialize(transactor: HikariTransactor[IO]): IO[Unit] = transactor.configure { dataSource =>

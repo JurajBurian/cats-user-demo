@@ -4,12 +4,15 @@ import doobie.*
 import doobie.implicits.*
 import doobie.postgres.implicits.*
 import cats.effect.Async
+import cats.mtl.Raise
 import cats.syntax.all.*
+
 import java.util.UUID
-import java.time.Instant
 import io.github.jb.domain.*
 
-class DoobieUserRepository[F[_]: Async](xa: Transactor[F]) extends UserRepository[F] {
+class DoobieUserRepository[F[_]: Async](xa: Transactor[F])(using R: Raise[F, ApiError]) extends UserRepository[F] {
+
+  import cats.mtl.syntax.raise.given // use sufix syntax with raise
 
   def create(userCreate: UserCreate, passwordHash: String): F[User] =
     sql"""
@@ -21,6 +24,7 @@ class DoobieUserRepository[F[_]: Async](xa: Transactor[F]) extends UserRepositor
       .query[User]
       .unique
       .transact(xa)
+      .onError { case ex => ApiError.InternalServerError(ex.getMessage).raise }
 
   def findByEmail(email: String): F[Option[User]] =
     sql"""

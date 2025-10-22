@@ -8,50 +8,46 @@ import sttp.tapir.server.ServerEndpoint
 import cats.Monad
 import cats.syntax.all.*
 import cats.mtl.Handle
-import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
-import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import io.github.jb.domain.*
 import io.github.jb.domain.given
-import io.github.jb.domain.ApiError
+import io.github.jb.domain.ApiError.*
 import sttp.model.StatusCode
 
 import java.util.UUID
 
 class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F], H: Handle[F, ApiError]) {
 
-  case class ErrorResponse(error: String, message: String)
-
-  given JsonValueCodec[ErrorResponse] = JsonCodecMaker.make
-
   private val basePath = "api" / "v1"
   private val bearerTokenHeader = auth.bearer[String]()
 
-  def fromApiError(error: ApiError): ErrorResponse =
-    ErrorResponse(error = error.productPrefix, message = error.message)
+  // Simple error handling - just convert to Either
+  private def handleServiceError[T](result: F[T]): F[Either[ApiError, T]] = {
+    H.attempt(result)
+  }
 
-  private def handleServiceError[T](result: F[T]): F[Either[ErrorResponse, T]] =
-    H.attempt(result).map {
-      case Right(value) => Right(value)
-      case Left(error)  => Left(fromApiError(error))
-    }
+  // Define specific error variants for each ApiError type
+  private val invalidCredentialsError =
+    oneOfVariant(StatusCode.Unauthorized, jsonBody[InvalidCredentials])
 
-  // Individual error variants - now using ErrorResponse
-  private val unauthorizedError =
-    oneOfVariant(StatusCode.Unauthorized, jsonBody[ErrorResponse].description("Authentication error"))
+  private val invalidRefreshTokenError =
+    oneOfVariant(StatusCode.Unauthorized, jsonBody[InvalidRefreshToken])
 
-  private val forbiddenError =
-    oneOfVariant(StatusCode.Forbidden, jsonBody[ErrorResponse].description("Access forbidden"))
+  private val invalidOrExpiredTokenError =
+    oneOfVariant(StatusCode.Unauthorized, jsonBody[InvalidOrExpiredToken])
 
-  private val notFoundError =
-    oneOfVariant(StatusCode.NotFound, jsonBody[ErrorResponse].description("Resource not found"))
+  private val accountDeactivatedError =
+    oneOfVariant(StatusCode.Forbidden, jsonBody[AccountDeactivated])
 
-  private val conflictError =
-    oneOfVariant(StatusCode.Conflict, jsonBody[ErrorResponse].description("Resource conflict"))
+  private val userNotFoundError =
+    oneOfVariant(StatusCode.NotFound, jsonBody[UserNotFound])
+
+  private val userAlreadyExistsError =
+    oneOfVariant(StatusCode.Conflict, jsonBody[UserAlreadyExists])
 
   private val internalServerError =
-    oneOfVariant(StatusCode.InternalServerError, jsonBody[ErrorResponse].description("Internal server error"))
+    oneOfVariant(StatusCode.InternalServerError, jsonBody[InternalServerError])
 
-  // All endpoints remain the same - they use handleServiceError which now uses Handle
+  // Each endpoint specifies exactly which errors it can return
   val loginEndpoint: ServerEndpoint[Any, F] =
     endpoint.post
       .in(basePath / "auth" / "login")
@@ -59,9 +55,9 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F], H: Handle[
       .out(jsonBody[AuthResponse])
       .errorOut(
         oneOf(
-          unauthorizedError, // InvalidCredentials
-          forbiddenError, // AccountDeactivated
-          internalServerError // UnknownError
+          invalidCredentialsError,
+          accountDeactivatedError,
+          internalServerError
         )
       )
       .serverLogic(loginRequest => handleServiceError(userService.login(loginRequest)))
@@ -73,10 +69,10 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F], H: Handle[
       .out(jsonBody[AuthResponse])
       .errorOut(
         oneOf(
-          unauthorizedError, // InvalidRefreshToken
-          notFoundError, // UserNotFound
-          forbiddenError, // AccountDeactivated
-          internalServerError // UnknownError
+          invalidRefreshTokenError,
+          userNotFoundError,
+          accountDeactivatedError,
+          internalServerError
         )
       )
       .serverLogic(refreshToken => handleServiceError(userService.refreshTokens(refreshToken)))
@@ -88,8 +84,8 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F], H: Handle[
       .out(jsonBody[UserResponse])
       .errorOut(
         oneOf(
-          conflictError, // UserAlreadyExists
-          internalServerError // UnknownError
+          userAlreadyExistsError,
+          internalServerError
         )
       )
       .serverLogic(userCreate => handleServiceError(userService.createUser(userCreate)))
@@ -101,10 +97,10 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F], H: Handle[
       .out(jsonBody[UserResponse])
       .errorOut(
         oneOf(
-          unauthorizedError, // InvalidOrExpiredToken
-          notFoundError, // UserNotFound
-          forbiddenError, // AccountDeactivated
-          internalServerError // UnknownError
+          invalidOrExpiredTokenError,
+          userNotFoundError,
+          accountDeactivatedError,
+          internalServerError
         )
       )
       .serverLogic { case (id, accessToken) =>
@@ -124,9 +120,9 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F], H: Handle[
       .out(jsonBody[Boolean])
       .errorOut(
         oneOf(
-          unauthorizedError, // InvalidOrExpiredToken
-          notFoundError, // UserNotFound
-          internalServerError // UnknownError
+          invalidOrExpiredTokenError,
+          userNotFoundError,
+          internalServerError
         )
       )
       .serverLogic { case (id, accessToken, statusUpdate) =>
@@ -145,8 +141,8 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F], H: Handle[
       .out(jsonBody[List[UserResponse]])
       .errorOut(
         oneOf(
-          unauthorizedError, // InvalidOrExpiredToken
-          internalServerError // UnknownError
+          invalidOrExpiredTokenError,
+          internalServerError
         )
       )
       .serverLogic { case (offset, count, accessToken) =>

@@ -16,7 +16,7 @@ class CustomHandle extends Handle[IO, ApiError] {
       case e: InternalError =>
         f(e.apiError)
       case other =>
-        f(ApiError.UnknownError(other.getMessage)) // re-raise non-ApiError as unknown error
+        f(ApiError.InternalServerError(other.getMessage)) // re-raise non-ApiError as unknown error
     }
 
   override def raise[E2 <: ApiError, A](e: E2): IO[A] =

@@ -35,13 +35,13 @@ class UserServiceImpl[F[_]](
       userOpt <- userRepo.findByEmail(loginRequest.email)
       user <- userOpt match {
         case Some(user) => user.pure[F]
-        case None       => ApiError.InvalidCredentials.raise
+        case None       => ApiError.InvalidCredentials().raise
       }
 
       _ <- validateUserStatus(user)
 
       isValid <- passwordService.verifyPassword(loginRequest.password, user.passwordHash)
-      _ <- if (!isValid) R.raise(ApiError.InvalidCredentials) else Monad[F].unit
+      _ <- if (!isValid) R.raise(ApiError.InvalidCredentials()) else Monad[F].unit
 
       accessToken <- jwtService.generateAccessToken(user)
       refreshToken <- jwtService.generateRefreshToken(user.id)
@@ -54,7 +54,7 @@ class UserServiceImpl[F[_]](
       refreshClaimsOpt <- jwtService.validateAndExtractRefreshToken(refreshToken)
       refreshClaims <- refreshClaimsOpt match {
         case Some(claims) => claims.pure[F]
-        case None         => ApiError.InvalidRefreshToken.raise
+        case None         => ApiError.InvalidRefreshToken().raise
       }
 
       userOpt <- userRepo.findById(refreshClaims.userId)
@@ -85,7 +85,7 @@ class UserServiceImpl[F[_]](
       accessClaimsOpt <- jwtService.validateAndExtractAccessToken(token)
       accessClaims <- accessClaimsOpt match {
         case Some(claims) => claims.pure[F]
-        case None         => ApiError.InvalidOrExpiredToken.raise
+        case None         => ApiError.InvalidOrExpiredToken().raise
       }
 
       userOpt <- userRepo.findById(accessClaims.userId)
@@ -102,7 +102,7 @@ class UserServiceImpl[F[_]](
     userRepo.findActive(offset, count).map(_.map(toUserResponse))
 
   private def validateUserStatus(user: User): F[Unit] =
-    if (!user.isActive) ApiError.AccountDeactivated.raise else Monad[F].unit
+    if (!user.isActive) ApiError.AccountDeactivated().raise else Monad[F].unit
 
   private def toUserResponse(user: User): UserResponse =
     UserResponse(
