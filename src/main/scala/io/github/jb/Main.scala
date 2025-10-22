@@ -44,7 +44,16 @@ object Main extends IOApp.Simple {
 
   private def initialize(transactor: HikariTransactor[IO]): IO[Unit] = transactor.configure { dataSource =>
     IO {
-      val flyway = Flyway.configure().dataSource(dataSource).schemas("public").load()
+      val flyway =
+        Flyway
+          .configure()
+          .dataSource(dataSource)
+          .lockRetryCount(10)
+          .baselineOnMigrate(true)
+          .validateMigrationNaming(true)
+          .ignoreMigrationPatterns("*:pending")
+          .schemas("public")
+          .load()
       flyway.migrate()
       ()
     }
