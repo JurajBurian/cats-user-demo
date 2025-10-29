@@ -21,9 +21,7 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F], H: Handle[
   private val bearerTokenHeader = auth.bearer[String]()
 
   // Simple error handling - just convert to Either
-  private def handleServiceError[T](result: F[T]): F[Either[ApiError, T]] = {
-    H.attempt(result)
-  }
+  private def handleServiceError[T](result: F[T]): F[Either[ApiError, T]] = H.attempt(result)
 
   // Define specific error variants for each ApiError type
   private val invalidCredentialsError =

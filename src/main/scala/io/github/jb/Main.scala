@@ -72,12 +72,15 @@ object Main extends IOApp.Simple {
   override def run: IO[Unit] = {
 
     val serverResource = for {
+      // Load configuration
       config <- Resource.eval(Config.load)
       _ <- Resource.eval(logger.info("Starting User Management API..."))
+
+      // Initialize database
       xa <- transactor(config.database)
       _ <- Resource.eval(initialize(xa))
 
-      // Create endpoints
+      // Assemble services and endpoints
       endpoints = new Endpoints[IO](createUserService(xa, config.jwt, config.bcrypt))
 
       // Create OpenAPI documentation
@@ -86,7 +89,7 @@ object Main extends IOApp.Simple {
         .SwaggerInterpreter()
         .fromEndpoints[IO](openApiEndpoints, "User Management API", "1.0")
 
-      // Create Netty server resource
+      // Start http server
       server <- NettyCatsServer
         .io()
         .flatMap { server =>
@@ -100,6 +103,7 @@ object Main extends IOApp.Simple {
         }
     } yield (server, config) // Return both server and config
 
+    // Run the application
     serverResource
       .use { case (server, config) =>
         logger.info(s"Server started at http://${config.http.host}:${config.http.port}") *>

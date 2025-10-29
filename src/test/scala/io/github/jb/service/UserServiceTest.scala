@@ -108,8 +108,8 @@ class UserServiceTest extends CatsEffectSuite {
         assertEquals(userResponse.email, "newuser@example.com")
         assertEquals(userResponse.username, "newuser")
         assertEquals(userResponse.firstName, Some("New"))
-        assert(foundUser.isDefined)
         assertEquals(foundUser.map(_.email), Some("newuser@example.com"))
+        assert(foundUser.isDefined)
       }
     }
   }
