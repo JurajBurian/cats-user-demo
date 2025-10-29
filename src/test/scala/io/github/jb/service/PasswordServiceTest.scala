@@ -8,21 +8,21 @@ class PasswordServiceTest extends FunSuite {
   val passwordService = new PasswordServiceImpl[SyncIO](12)
 
   test("hash and verify password successfully") {
-    for {
+    (for {
       hash <- passwordService.hashPassword("testPassword123")
       isValid <- passwordService.verifyPassword("testPassword123", hash)
-    } yield assert(isValid)
+    } yield assert(isValid)).unsafeRunSync()
   }
 
   test("fail verification with wrong password") {
-    for {
+    (for {
       hash <- passwordService.hashPassword("testPassword123")
       isValid <- passwordService.verifyPassword("wrongPassword", hash)
-    } yield assert(!isValid)
+    } yield assert(!isValid)).unsafeRunSync()
   }
 
   test("different hashes for same password") {
-    for {
+    (for {
       hash1 <- passwordService.hashPassword("samePassword")
       hash2 <- passwordService.hashPassword("samePassword")
       isValid1 <- passwordService.verifyPassword("samePassword", hash1)
@@ -31,6 +31,6 @@ class PasswordServiceTest extends FunSuite {
       assert(isValid1)
       assert(isValid2)
       assert(hash1 != hash2) // Different salts should produce different hashes
-    }
+    }).unsafeRunSync()
   }
 }

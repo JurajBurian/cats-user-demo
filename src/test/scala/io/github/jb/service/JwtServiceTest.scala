@@ -32,7 +32,7 @@ class JwtServiceTest extends FunSuite {
   )
 
   test("generate and validate access token") {
-    for {
+    (for {
       token <- jwtService.generateAccessToken(testUser)
       claims <- jwtService.validateAndExtractAccessToken(token)
     } yield {
@@ -40,32 +40,32 @@ class JwtServiceTest extends FunSuite {
       assertEquals(claims.map(_.userId), Some(testUser.id))
       assertEquals(claims.map(_.email), Some(testUser.email))
       assertEquals(claims.map(_.username), Some(testUser.username))
-    }
+    }).unsafeRunSync()
   }
 
   test("generate and validate refresh token") {
-    for {
+    (for {
       token <- jwtService.generateRefreshToken(testUser.id)
       claims <- jwtService.validateAndExtractRefreshToken(token)
     } yield {
       assert(claims.isDefined)
       assertEquals(claims.map(_.userId), Some(testUser.id))
       assertEquals(claims.map(_.tokenType), Some("refresh"))
-    }
+    }).unsafeRunSync()
   }
 
   test("fail validation with invalid token") {
-    for {
+    (for {
       claims <- jwtService.validateAndExtractAccessToken("invalid.token.here")
-    } yield assertEquals(claims, None)
+    } yield assertEquals(claims, None)).unsafeRunSync()
   }
 
   test("fail validation with wrong secret key") {
     val wrongJwtService = new JwtServiceImpl[SyncIO](jwtConfig.copy(secretKey = "wrong-key"))
 
-    for {
+    (for {
       token <- jwtService.generateAccessToken(testUser)
       claims <- wrongJwtService.validateAndExtractAccessToken(token)
-    } yield assertEquals(claims, None)
+    } yield assertEquals(claims, None)).unsafeRunSync()
   }
 }
