@@ -1,36 +1,44 @@
 package io.github.jb.service
 
-import cats.effect.SyncIO
-import munit.FunSuite
+import cats.effect.IO
+import munit.CatsEffectSuite
 
-class PasswordServiceTest extends FunSuite {
+class PasswordServiceTest extends CatsEffectSuite {
 
-  val passwordService = new PasswordServiceImpl[SyncIO](12)
+  val passwordService = new PasswordServiceImpl[IO](12)
 
   test("hash and verify password successfully") {
-    (for {
-      hash <- passwordService.hashPassword("testPassword123")
-      isValid <- passwordService.verifyPassword("testPassword123", hash)
-    } yield assert(isValid)).unsafeRunSync()
+    for {
+      hash <- passwordService.hashPassword("testPassword123").value
+      isValid <- hash match {
+        case Left(_)     => fail("Hashing failed")
+        case Right(hash) => passwordService.verifyPassword("testPassword123", hash).value
+      }
+    } yield {
+      assert(isValid.isRight)
+      assert(isValid.getOrElse(false))
+    }
   }
 
   test("fail verification with wrong password") {
-    (for {
-      hash <- passwordService.hashPassword("testPassword123")
-      isValid <- passwordService.verifyPassword("wrongPassword", hash)
-    } yield assert(!isValid)).unsafeRunSync()
+    for {
+      hash <- passwordService.hashPassword("testPassword123").value
+      isValid <- hash match {
+        case Left(_) =>
+          fail("Hashing failed")
+        case Right(hash) =>
+          passwordService.verifyPassword("wrongPassword", hash).value
+      }
+    } yield assert(!isValid.getOrElse(true))
+
   }
 
   test("different hashes for same password") {
-    (for {
-      hash1 <- passwordService.hashPassword("samePassword")
-      hash2 <- passwordService.hashPassword("samePassword")
-      isValid1 <- passwordService.verifyPassword("samePassword", hash1)
-      isValid2 <- passwordService.verifyPassword("samePassword", hash2)
+    for {
+      hash1 <- passwordService.hashPassword("samePassword").value
+      hash2 <- passwordService.hashPassword("samePassword").value
     } yield {
-      assert(isValid1)
-      assert(isValid2)
-      assert(hash1 != hash2) // Different salts should produce different hashes
-    }).unsafeRunSync()
+      assert(hash1.getOrElse("wrong") != hash2.getOrElse("wrong")) // Different salts should produce different hashes
+    }
   }
 }

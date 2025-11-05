@@ -26,14 +26,12 @@ package object domain {
 
   given JsonValueCodec[Boolean] = JsonCodecMaker.make
 
-  import io.github.jb.domain.ApiError.*
-
-  given JsonValueCodec[InvalidOrExpiredToken] = JsonCodecMaker.makeOpenapiLike
-  given JsonValueCodec[AccountDeactivated] = JsonCodecMaker.makeOpenapiLike
-  given JsonValueCodec[UserNotFound] = JsonCodecMaker.makeOpenapiLike
-  given JsonValueCodec[UserAlreadyExists] = JsonCodecMaker.makeOpenapiLike
-  given JsonValueCodec[InvalidCredentials] = JsonCodecMaker.makeOpenapiLike
-  given JsonValueCodec[InvalidRefreshToken] = JsonCodecMaker.makeOpenapiLike
-  given JsonValueCodec[InternalServerError] = JsonCodecMaker.makeOpenapiLike
+  given JsonValueCodec[InvalidOrExpiredToken] = JsonCodecMaker.makeOpenapiLike("name")
+  given JsonValueCodec[AccountDeactivated] = JsonCodecMaker.makeOpenapiLike("name")
+  given JsonValueCodec[UserNotFound] = JsonCodecMaker.makeOpenapiLike("name")
+  given JsonValueCodec[UserAlreadyExists] = JsonCodecMaker.makeOpenapiLike("name")
+  given JsonValueCodec[InvalidCredentials] = JsonCodecMaker.makeOpenapiLike("name")
+  given JsonValueCodec[InvalidOrExpiredRefreshToken] = JsonCodecMaker.makeOpenapiLike("name")
+  given JsonValueCodec[InternalServerError] = JsonCodecMaker.makeOpenapiLike("name")
 
 }

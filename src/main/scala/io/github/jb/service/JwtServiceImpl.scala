@@ -1,5 +1,6 @@
 package io.github.jb.service
 
+import cats.data.EitherT
 import cats.effect.Sync
 import cats.effect.Clock
 import cats.syntax.all.*
@@ -18,24 +19,25 @@ class JwtServiceImpl[F[_]](config: JwtConfig)(using sync: Sync[F], clock: Clock[
 
   private def currentTime: F[Instant] = Clock[F].realTimeInstant
 
-  def generateAccessToken(user: User): F[String] = currentTime.map { now =>
-    val claims = AccessTokenClaims(
-      userId = user.id,
-      email = user.email,
-      username = user.username
-    )
-    val jsonClaims = writeToString(claims)
+  def generateAccessToken[E](user: User): EitherT[F, E, String] =
+    EitherT.liftF(currentTime.map { now =>
+      val claims = AccessTokenClaims(
+        userId = user.id,
+        email = user.email,
+        username = user.username
+      )
+      val jsonClaims = writeToString(claims)
 
-    val jwtClaims = JwtClaim(
-      expiration = Some(now.plusSeconds(15 * 60).getEpochSecond), // 15 minutes
-      issuedAt = Some(now.getEpochSecond),
-      subject = Some(user.id.toString),
-      content = jsonClaims
-    )
-    Jwt.encode(jwtClaims, config.secretKey, algorithms.head)
-  }
+      val jwtClaims = JwtClaim(
+        expiration = Some(now.plusSeconds(15 * 60).getEpochSecond), // 15 minutes
+        issuedAt = Some(now.getEpochSecond),
+        subject = Some(user.id.toString),
+        content = jsonClaims
+      )
+      Jwt.encode(jwtClaims, config.secretKey, algorithms.head)
+    })
 
-  def generateRefreshToken(userId: UUID): F[String] = currentTime.map { now =>
+  def generateRefreshToken[E](userId: UUID): EitherT[F, E, String] = EitherT.liftF(currentTime.map { now =>
     val claims = RefreshTokenClaims(userId = userId)
     val jsonClaims = writeToString(claims)
     val jwtClaims = JwtClaim(
@@ -45,23 +47,31 @@ class JwtServiceImpl[F[_]](config: JwtConfig)(using sync: Sync[F], clock: Clock[
       content = jsonClaims
     )
     Jwt.encode(jwtClaims, config.secretKey, algorithms.head)
+  })
+
+  def generateTokens[E](user: User): EitherT[F, E, Tokens] = generateAccessToken(user).flatMap { p1 =>
+    generateRefreshToken(user.id).map(p2 => Tokens(p1, p2))
   }
 
-  def validateAndExtractAccessToken(token: String): F[Option[AccessTokenClaims]] =
-    sync.delay {
-      if (Jwt.isValid(token, config.secretKey, algorithms)) {
-        Jwt.decode(token, config.secretKey, algorithms).toOption.flatMap { claim =>
-          scala.util.Try(readFromString[AccessTokenClaims](claim.content)).toOption
-        }
-      } else None
+  def validateAndExtractAccessToken(token: String): EitherT[F, InvalidOrExpiredToken, AccessTokenClaims] =
+    if (Jwt.isValid(token, config.secretKey, algorithms)) {
+      Jwt.decode(token, config.secretKey, algorithms).toOption.flatMap { claim =>
+        scala.util.Try(readFromString[AccessTokenClaims](claim.content)).toOption
+      } match {
+        case Some(claims) => EitherT.rightT(claims)
+        case None         => EitherT.leftT(InvalidOrExpiredToken())
+      }
+    } else {
+      EitherT.leftT(InvalidOrExpiredToken())
     }
 
-  def validateAndExtractRefreshToken(token: String): F[Option[RefreshTokenClaims]] =
-    sync.delay {
-      if (Jwt.isValid(token, config.secretKey, algorithms)) {
-        Jwt.decode(token, config.secretKey, algorithms).toOption.flatMap { claim =>
-          scala.util.Try(readFromString[RefreshTokenClaims](claim.content)).toOption
-        }
-      } else None
-    }
+  def validateAndExtractRefreshToken(token: String): EitherT[F, InvalidOrExpiredRefreshToken, RefreshTokenClaims] =
+    if (Jwt.isValid(token, config.secretKey, algorithms)) {
+      Jwt.decode(token, config.secretKey, algorithms).toOption.flatMap { claim =>
+        scala.util.Try(readFromString[RefreshTokenClaims](claim.content)).toOption
+      } match {
+        case Some(claims) => EitherT.rightT(claims)
+        case None         => EitherT.leftT(InvalidOrExpiredRefreshToken())
+      }
+    } else EitherT.leftT(InvalidOrExpiredRefreshToken())
 }

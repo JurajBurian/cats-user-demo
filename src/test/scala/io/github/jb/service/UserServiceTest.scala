@@ -21,8 +21,6 @@ import scala.concurrent.duration.DurationInt
 
 class UserServiceTest extends CatsEffectSuite {
 
-  given Handle[IO, ApiError] = new CustomHandle()
-
   lazy val dbContainer: PostgreSQLContainer = {
     val pg = new PostgreSQLContainer(Some(DockerImageName.parse("postgres:17")))
     pg.start()
@@ -57,9 +55,6 @@ class UserServiceTest extends CatsEffectSuite {
 
   private lazy val testServices: (DoobieUserRepository[IO], UserServiceImpl[IO]) = (userRepo, userService)
 
-  private def handleServiceError[A](io: IO[A]): IO[Either[ApiError, A]] =
-    Handle[IO, ApiError].attempt(io)
-
   override def beforeAll(): Unit = {
     super.beforeAll()
     // execute migrations
@@ -81,14 +76,25 @@ class UserServiceTest extends CatsEffectSuite {
 
   private def withServices[A](
       test: (DoobieUserRepository[IO], UserServiceImpl[IO]) => IO[A]
-  ): IO[A] =
+  ): IO[A] = {
     IO(testServices)
       .flatMap { services =>
         import doobie.*
         // before each test clean database
         sql"DELETE from users".update.run.transact(transactor).void.map(_ => services)
       }
-      .flatMap { case (userRepo, userService) => test(userRepo, userService) }
+      .flatMap { case (userRepo, userService) =>
+        test(userRepo, userService)
+      }
+  }
+
+  private def onResult[E, R](
+      p: Either[E, R],
+      right: (R) => Unit
+  ): Unit = p match {
+    case Right(r) => right(r)
+    case Left(e)  => fail(s"Failed with: $e")
+  }
 
   test("create user successfully") {
 
@@ -102,14 +108,24 @@ class UserServiceTest extends CatsEffectSuite {
       )
 
       for {
-        userResponse <- userService.createUser(userCreate)
-        foundUser <- userRepo.findByEmail("newuser@example.com")
+        userResponse <- userService.createUser(userCreate).value
+        foundUser <- userRepo.findByEmail("newuser@example.com").value
       } yield {
-        assertEquals(userResponse.email, "newuser@example.com")
-        assertEquals(userResponse.username, "newuser")
-        assertEquals(userResponse.firstName, Some("New"))
-        assertEquals(foundUser.map(_.email), Some("newuser@example.com"))
-        assert(foundUser.isDefined)
+        onResult(
+          userResponse,
+          { userResponse =>
+            assertEquals(userResponse.email, "newuser@example.com")
+            assertEquals(userResponse.username, "newuser")
+            assertEquals(userResponse.firstName, Some("New"))
+          }
+        )
+        onResult(
+          foundUser,
+          { foundUser =>
+            assertEquals(foundUser.map(_.email), Some("newuser@example.com"))
+            assert(foundUser.isDefined)
+          }
+        )
       }
     }
   }
@@ -125,13 +141,14 @@ class UserServiceTest extends CatsEffectSuite {
       )
 
       for {
-        _ <- userService.createUser(userCreate)
-        result <- handleServiceError(userService.createUser(userCreate.copy(username = "user2")))
+        _ <- userService.createUser(userCreate).value
+        result <- userService.createUser(userCreate.copy(username = "user2")).value
       } yield {
-        assert(result.isLeft)
         result match {
-          case Left(value: ApiError.UserAlreadyExists) =>
+          case Left(value: UserAlreadyExistsErr) =>
             assertEquals(value.email, "duplicate@example.com")
+          case Left(x) =>
+            fail(s"Failed with wrong errorr: $x")
           case _ => fail("Should have failed")
         }
       }
@@ -149,14 +166,19 @@ class UserServiceTest extends CatsEffectSuite {
       )
 
       for {
-        _ <- userService.createUser(userCreate)
-        authResponse <- userService.login(LoginRequest("login@example.com", "correctPassword"))
+        _ <- userService.createUser(userCreate).value
+        authResponse <- userService.login(LoginRequest("login@example.com", "correctPassword")).value
       } yield {
-        assertEquals(authResponse.user.email, "login@example.com")
-        assertEquals(authResponse.user.username, "loginuser")
-        assert(authResponse.tokens.accessToken.nonEmpty)
-        assert(authResponse.tokens.refreshToken.nonEmpty)
-        assertEquals(authResponse.tokens.tokenType, "Bearer")
+        onResult(
+          authResponse,
+          { authResponse =>
+            assertEquals(authResponse.user.email, "login@example.com")
+            assertEquals(authResponse.user.username, "loginuser")
+            assert(authResponse.tokens.accessToken.nonEmpty)
+            assert(authResponse.tokens.refreshToken.nonEmpty)
+            assertEquals(authResponse.tokens.tokenType, "Bearer")
+          }
+        )
       }
     }
   }
@@ -172,13 +194,13 @@ class UserServiceTest extends CatsEffectSuite {
       )
 
       for {
-        _ <- userService.createUser(userCreate)
-        result <- handleServiceError(userService.login(LoginRequest("login2@example.com", "wrongPassword")))
+        _ <- userService.createUser(userCreate).value
+        result <- userService.login(LoginRequest("login2@example.com", "wrongPassword")).value
       } yield {
         assert(result.isLeft)
         result match {
           case Left(value) =>
-            assert(value.isInstanceOf[ApiError.InvalidCredentials.type])
+            assert(value.isInstanceOf[InvalidCredentials])
           case _ => fail("Should have failed")
 
         }
@@ -188,10 +210,13 @@ class UserServiceTest extends CatsEffectSuite {
     test("fail login with non-existent email") {
       withServices { case (_, userService) =>
         for {
-          result <- userService.login(LoginRequest("nonexistent@example.com", "password")).attempt
+          result <- userService.login(LoginRequest("nonexistent@example.com", "password")).value
         } yield {
-          assert(result.isLeft)
-          assert(result.left.get.getMessage.contains("Invalid credentials"))
+          result match {
+            case Left(value) =>
+              assert(value.isInstanceOf[InvalidCredentials])
+            case _ => fail("Should have failed")
+          }
         }
       }
     }
@@ -207,16 +232,31 @@ class UserServiceTest extends CatsEffectSuite {
         )
 
         for {
-          _ <- userService.createUser(userCreate)
-          loginResponse <- userService.login(LoginRequest("refresh@example.com", "password"))
+          _ <- userService.createUser(userCreate).value
+          loginResponse <- userService.login(LoginRequest("refresh@example.com", "password")).value
           _ <- IO.sleep(1.seconds) // need some time
-          refreshResponse <- userService.refreshTokens(loginResponse.tokens.refreshToken)
+          refreshResponse <- loginResponse match {
+            case Left(value) =>
+              fail("Should have failed")
+            case Right(value) =>
+              userService.refreshTokens(value.tokens.refreshToken).value
+          }
         } yield {
-          assertEquals(refreshResponse.user.email, "refresh@example.com")
-          assert(refreshResponse.tokens.accessToken.nonEmpty)
-          assert(refreshResponse.tokens.refreshToken.nonEmpty)
-          assert(loginResponse.tokens.accessToken != refreshResponse.tokens.accessToken)
-          assert(loginResponse.tokens.refreshToken != refreshResponse.tokens.refreshToken)
+          onResult(
+            refreshResponse,
+            { refreshResponse =>
+              assertEquals(refreshResponse.user.email, "refresh@example.com")
+              assert(refreshResponse.tokens.accessToken.nonEmpty)
+              assert(refreshResponse.tokens.refreshToken.nonEmpty)
+            }
+          )
+          onResult(
+            loginResponse,
+            { loginResponse =>
+              assert(loginResponse.tokens.accessToken.nonEmpty)
+              assert(loginResponse.tokens.refreshToken.nonEmpty)
+            }
+          )
         }
       }
     }
@@ -224,10 +264,14 @@ class UserServiceTest extends CatsEffectSuite {
     test("fail to refresh tokens with invalid refresh token") {
       withServices { case (_, userService) =>
         for {
-          result <- userService.refreshTokens("invalid.refresh.token").attempt
+          result <- userService.refreshTokens("invalid.refresh.token").value
         } yield {
-          assert(result.isLeft)
-          assert(result.left.get.getMessage.contains("Invalid refresh token"))
+          result match {
+            case Left(value) =>
+              assert(value.isInstanceOf[InvalidOrExpiredRefreshToken])
+            case Right(value) =>
+              fail("Should have failed")
+          }
         }
       }
     }
@@ -235,9 +279,14 @@ class UserServiceTest extends CatsEffectSuite {
     test("fail to refresh tokens with malformed JWT") {
       withServices { case (_, userService) =>
         for {
-          result <- userService.refreshTokens("header.payload.signature").attempt
+          result <- userService.refreshTokens("kokiLoki").value
         } yield {
-          assert(result.isLeft)
+          result match {
+            case Left(value) =>
+              assert(value.isInstanceOf[InvalidOrExpiredRefreshToken])
+            case Right(value) =>
+              fail("Should have failed")
+          }
         }
       }
     }
@@ -253,13 +302,29 @@ class UserServiceTest extends CatsEffectSuite {
         )
 
         for {
-          createdUser <- userService.createUser(userCreate)
-          retrievedUser <- userService.getUser(createdUser.id)
+          createdUser <- userService.createUser(userCreate).value
+          retrievedUser <- createdUser match {
+            case Left(value) =>
+              fail("Should have failed")
+            case Right(value) =>
+              userService.getUser(value.id).value
+          }
         } yield {
-          assertEquals(retrievedUser.id, createdUser.id)
-          assertEquals(retrievedUser.email, "getuser@example.com")
-          assertEquals(retrievedUser.username, "getuser")
-          assertEquals(retrievedUser.firstName, Some("Get"))
+
+          val cu = createdUser match {
+            case Left(value) =>
+              fail("Should have failed")
+            case Right(value) => value
+          }
+          val ru = retrievedUser match {
+            case Left(value) =>
+              fail("Should have failed")
+            case Right(value) => value
+          }
+          assertEquals(ru.id, cu.id)
+          assertEquals(ru.email, "getuser@example.com")
+          assertEquals(ru.username, "getuser")
+          assertEquals(ru.firstName, Some("Get"))
         }
       }
     }
@@ -269,10 +334,14 @@ class UserServiceTest extends CatsEffectSuite {
         val nonExistentId = UUID.randomUUID()
 
         for {
-          result <- userService.getUser(nonExistentId).attempt
+          result <- userService.getUser(nonExistentId).value
         } yield {
-          assert(result.isLeft)
-          assert(result.left.get.getMessage.contains("User not found"))
+          result match {
+            case Left(value) =>
+              assert(value.isInstanceOf[UserNotFound])
+            case Right(value) =>
+              fail("Should have failed")
+          }
         }
       }
     }
@@ -288,14 +357,44 @@ class UserServiceTest extends CatsEffectSuite {
         )
 
         for {
-          createdUser <- userService.createUser(userCreate)
-          initialUser <- userRepo.findById(createdUser.id)
-          updateResult <- userService.updateUserStatus(createdUser.id, isActive = false)
-          updatedUser <- userRepo.findById(createdUser.id)
+          createdUser <- userService.createUser(userCreate).value
+          initialUser <- createdUser match {
+            case Left(value) =>
+              fail("Should have failed")
+            case Right(v) =>
+              userRepo.findById(v.id).value
+          }
+          updateResult <- initialUser match {
+            case Left(value) =>
+              fail("Should have failed")
+            case Right(v) =>
+              userService.updateUserStatus(v.get.id, isActive = false).value
+          }
+          updatedUser <- createdUser match {
+            case Left(value) =>
+              fail("Should have failed")
+            case Right(v) =>
+              userRepo.findById(v.id).value
+          }
         } yield {
-          assertEquals(initialUser.map(_.isActive), Some(true))
-          assert(updateResult)
-          assertEquals(updatedUser.map(_.isActive), Some(false))
+          onResult(
+            updateResult,
+            { updateResult =>
+              assertEquals(updateResult, true)
+            }
+          )
+          onResult(
+            initialUser,
+            { initialUser =>
+              assertEquals(initialUser.map(_.isActive), Some(true))
+            }
+          )
+          onResult(
+            updatedUser,
+            { updatedUser =>
+              assertEquals(updatedUser.map(_.isActive), Some(false))
+            }
+          )
         }
       }
     }
@@ -309,12 +408,22 @@ class UserServiceTest extends CatsEffectSuite {
         )
 
         for {
-          createdUsers <- users.traverse(userService.createUser)
-          _ <- userService.updateUserStatus(createdUsers(2).id, isActive = false)
-          activeUsers <- userService.listActiveUsers(0L, 10L)
+          createdUsers <- users.traverse(userService.createUser).value
+          _ <- createdUsers match {
+            case Left(value) =>
+              fail("Should have failed")
+            case Right(value) =>
+              userService.updateUserStatus(value.get(2).get.id, isActive = false).value
+          }
+          activeUsers <- userService.listActiveUsers(0L, 10L).value
         } yield {
-          assertEquals(activeUsers.size, 2)
-          assert(activeUsers.forall(_.isActive))
+          onResult(
+            activeUsers,
+            { activeUsers =>
+              assertEquals(activeUsers.size, 2)
+              assert(activeUsers.forall(_.isActive))
+            }
+          )
         }
       }
     }
@@ -330,13 +439,23 @@ class UserServiceTest extends CatsEffectSuite {
         )
 
         for {
-          _ <- userService.createUser(userCreate)
-          loginResponse <- userService.login(LoginRequest("validate@example.com", "password"))
-          user <- userService.validateUserForAccess(loginResponse.tokens.accessToken)
+          _ <- userService.createUser(userCreate).value
+          loginResponse <- userService.login(LoginRequest("validate@example.com", "password")).value
+          user <- loginResponse match {
+            case Left(value) =>
+              fail("Should have failed")
+            case Right(value) =>
+              userService.validateUserForAccess(value.tokens.accessToken).value
+          }
         } yield {
-          assertEquals(user.email, "validate@example.com")
-          assertEquals(user.username, "validateuser")
-          assert(user.isActive)
+          onResult(
+            user,
+            { user =>
+              assertEquals(user.email, "validate@example.com")
+              assertEquals(user.username, "validateuser")
+              assert(user.isActive)
+            }
+          )
         }
       }
     }
@@ -344,12 +463,12 @@ class UserServiceTest extends CatsEffectSuite {
     test("fail to validate user access with invalid token") {
       withServices { case (_, userService) =>
         for {
-          result <- userService.validateUserForAccess("invalid.token.here").attempt
+          result <- userService.validateUserForAccess("invalid.token.here").value
         } yield {
           assert(result.isLeft)
           result match {
             case Left(value) =>
-              assert(value.isInstanceOf[ApiError.InvalidOrExpiredToken.type])
+              assert(value.isInstanceOf[InvalidOrExpiredToken])
             case Right(value) =>
               fail("Should have failed")
           }
@@ -368,14 +487,19 @@ class UserServiceTest extends CatsEffectSuite {
         )
 
         for {
-          createdUser <- userService.createUser(userCreate)
-          _ <- userService.updateUserStatus(createdUser.id, isActive = false)
-          result <- userService.login(LoginRequest("inactive@example.com", "password")).attempt
+          createdUser <- userService.createUser(userCreate).value
+          _ <- createdUser match {
+            case Left(value) =>
+              fail("Should have failed")
+            case Right(value) =>
+              userService.updateUserStatus(value.id, isActive = false).value
+          }
+          result <- userService.login(LoginRequest("inactive@example.com", "password")).value
         } yield {
           assert(result.isLeft)
           result match {
             case Left(value) =>
-              assert(value.isInstanceOf[ApiError.AccountDeactivated.type])
+              assert(value.isInstanceOf[AccountDeactivated])
             case Right(value) =>
               fail("Should have failed")
           }

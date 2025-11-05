@@ -1,33 +1,42 @@
 package io.github.jb.domain
 
+import cats.data.EitherT
+
 import java.util.UUID
 
 trait UserRepository[F[_]] {
-  def create(userCreate: UserCreate, passwordHash: String): F[User]
-  def findByEmail(email: String): F[Option[User]]
-  def findById(id: UUID): F[Option[User]]
-  def updateStatus(id: UUID, isActive: Boolean): F[Boolean]
-  def findActive(offset: Long, count: Long): F[List[User]]
+  def create(userCreate: UserCreate, passwordHash: String): EitherT[F, InternalServerError, User]
+  def findByEmail(email: String): EitherT[F, InternalServerError, Option[User]]
+  def findById(id: UUID): EitherT[F, InternalServerError, Option[User]]
+  def updateStatus(id: UUID, isActive: Boolean): EitherT[F, InternalServerError, Boolean]
+  def findActive(offset: Long, count: Long): EitherT[F, InternalServerError, List[User]]
 }
 
 trait JwtService[F[_]] {
-  def generateAccessToken(user: User): F[String]
-  def generateRefreshToken(userId: UUID): F[String]
-  def validateAndExtractAccessToken(token: String): F[Option[AccessTokenClaims]]
-  def validateAndExtractRefreshToken(token: String): F[Option[RefreshTokenClaims]]
+  def generateAccessToken[E](user: User): EitherT[F, E, String]
+  def generateRefreshToken[E](userId: UUID): EitherT[F, E, String]
+  def generateTokens[E](userId: User): EitherT[F, E, Tokens]
+  def validateAndExtractAccessToken(token: String): EitherT[F, InvalidOrExpiredToken, AccessTokenClaims]
+  def validateAndExtractRefreshToken(token: String): EitherT[F, InvalidOrExpiredRefreshToken, RefreshTokenClaims]
 }
 
 trait PasswordService[F[_]] {
-  def hashPassword(password: String): F[String]
-  def verifyPassword(password: String, hash: String): F[Boolean]
+  def hashPassword[E](password: String): EitherT[F, E, String]
+  def verifyPassword[E](password: String, hash: String): EitherT[F, E, Boolean]
 }
 
 trait UserService[F[_]] {
-  def createUser(userCreate: UserCreate): F[UserResponse]
-  def login(loginRequest: LoginRequest): F[AuthResponse]
-  def refreshTokens(refreshToken: String): F[AuthResponse]
-  def getUser(id: UUID): F[UserResponse]
-  def updateUserStatus(id: UUID, isActive: Boolean): F[Boolean]
-  def validateUserForAccess(token: String): F[User]
-  def listActiveUsers(offset: Long, count: Long): F[List[UserResponse]]
+  def createUser(userCreate: UserCreate): EitherT[F, InternalServerError | UserAlreadyExists, UserResponse]
+  def login(
+      loginRequest: LoginRequest
+  ): EitherT[F, InternalServerError | AccountDeactivated | InvalidCredentials, AuthResponse]
+  def refreshTokens(
+      refreshToken: String
+  ): EitherT[F, InternalServerError | AccountDeactivated | InvalidOrExpiredRefreshToken | UserNotFound, AuthResponse]
+  def getUser(id: UUID): EitherT[F, InternalServerError | UserNotFound, UserResponse]
+  def updateUserStatus(id: UUID, isActive: Boolean): EitherT[F, InternalServerError, Boolean]
+  def validateUserForAccess(
+      token: String
+  ): EitherT[F, InternalServerError | InvalidOrExpiredToken | AccountDeactivated | UserNotFound, UserResponse]
+  def listActiveUsers(offset: Long, count: Long): EitherT[F, InternalServerError, List[UserResponse]]
 }

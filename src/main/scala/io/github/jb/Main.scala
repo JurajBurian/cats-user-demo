@@ -59,7 +59,6 @@ object Main extends IOApp.Simple {
     }
   }
 
-  given Handle[IO, ApiError] = new CustomHandle
 
   private def createUserService(xa: HikariTransactor[IO], jwt: JwtConfig, bcrypt: BcryptConfig) = {
 

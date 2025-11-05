@@ -6,29 +6,25 @@ import sttp.tapir.generic.auto.*
 import sttp.tapir.json.jsoniter.jsonBody
 import sttp.tapir.server.ServerEndpoint
 import cats.Monad
+import cats.data.EitherT
 import cats.syntax.all.*
-import cats.mtl.Handle
 import io.github.jb.domain.*
 import io.github.jb.domain.given
-import io.github.jb.domain.ApiError.*
 import sttp.model.StatusCode
 
 import java.util.UUID
 
-class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F], H: Handle[F, ApiError]) {
+class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F]) {
 
   private val basePath = "api" / "v1"
   private val bearerTokenHeader = auth.bearer[String]()
-
-  // Simple error handling - just convert to Either
-  private def handleServiceError[T](result: F[T]): F[Either[ApiError, T]] = H.attempt(result)
 
   // Define specific error variants for each ApiError type
   private val invalidCredentialsError =
     oneOfVariant(StatusCode.Unauthorized, jsonBody[InvalidCredentials])
 
   private val invalidRefreshTokenError =
-    oneOfVariant(StatusCode.Unauthorized, jsonBody[InvalidRefreshToken])
+    oneOfVariant(StatusCode.Unauthorized, jsonBody[InvalidOrExpiredRefreshToken])
 
   private val invalidOrExpiredTokenError =
     oneOfVariant(StatusCode.Unauthorized, jsonBody[InvalidOrExpiredToken])
@@ -58,7 +54,7 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F], H: Handle[
           internalServerError
         )
       )
-      .serverLogic(loginRequest => handleServiceError(userService.login(loginRequest)))
+      .serverLogic(loginRequest => userService.login(loginRequest).value)
 
   val refreshEndpoint: ServerEndpoint[Any, F] =
     endpoint.post
@@ -73,7 +69,7 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F], H: Handle[
           internalServerError
         )
       )
-      .serverLogic(refreshToken => handleServiceError(userService.refreshTokens(refreshToken)))
+      .serverLogic(refreshToken => userService.refreshTokens(refreshToken).value)
 
   val createUserEndpoint: ServerEndpoint[Any, F] =
     endpoint.post
@@ -86,7 +82,7 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F], H: Handle[
           internalServerError
         )
       )
-      .serverLogic(userCreate => handleServiceError(userService.createUser(userCreate)))
+      .serverLogic(userCreate => userService.createUser(userCreate).value)
 
   val getUserEndpoint: ServerEndpoint[Any, F] =
     endpoint.get
@@ -102,12 +98,10 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F], H: Handle[
         )
       )
       .serverLogic { case (id, accessToken) =>
-        handleServiceError {
-          for
-            _ <- userService.validateUserForAccess(accessToken)
-            user <- userService.getUser(id)
-          yield user
-        }
+        (for {
+          _ <- userService.validateUserForAccess(accessToken)
+          user <- userService.getUser(id).flatMap(r => EitherT.pure(r)) // last mapping return all types to the game
+        } yield user).value
       }
 
   val updateUserStatusEndpoint: ServerEndpoint[Any, F] =
@@ -120,16 +114,18 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F], H: Handle[
         oneOf(
           invalidOrExpiredTokenError,
           userNotFoundError,
-          internalServerError
+          internalServerError,
+          accountDeactivatedError
         )
       )
       .serverLogic { case (id, accessToken, statusUpdate) =>
-        handleServiceError {
-          for
-            _ <- userService.validateUserForAccess(accessToken)
-            result <- userService.updateUserStatus(id, statusUpdate.isActive)
-          yield result
-        }
+        (for {
+          _ <- userService.validateUserForAccess(accessToken)
+          result <- userService
+            .updateUserStatus(id, statusUpdate.isActive)
+            .flatMap(r => EitherT.pure(r)) // last mapping return all types to the game
+        } yield result).value
+
       }
 
   val listUsersEndpoint: ServerEndpoint[Any, F] =
@@ -140,16 +136,18 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F], H: Handle[
       .errorOut(
         oneOf(
           invalidOrExpiredTokenError,
-          internalServerError
+          internalServerError,
+          accountDeactivatedError,
+          userNotFoundError
         )
       )
       .serverLogic { case (offset, count, accessToken) =>
-        handleServiceError {
-          for
-            _ <- userService.validateUserForAccess(accessToken)
-            users <- userService.listActiveUsers(offset, count)
-          yield users
-        }
+        (for {
+          _ <- userService.validateUserForAccess(accessToken)
+          users <- userService
+            .listActiveUsers(offset, count)
+            .flatMap(r => EitherT.pure(r)) // last mapping return all types to the game
+        } yield users).value
       }
 
   val allEndpoints: List[ServerEndpoint[Any, F]] =

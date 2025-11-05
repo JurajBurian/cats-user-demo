@@ -1,15 +1,16 @@
 package io.github.jb.service
 
-import cats.effect.SyncIO
+import cats.effect.IO
 import io.github.jb.config.JwtConfig
-import munit.FunSuite
+import munit.{CatsEffectSuite, FunSuite}
 
 import java.util.UUID
 import io.github.jb.domain.*
+import munit.Clue.generate
 
 import java.time.Instant
 
-class JwtServiceTest extends FunSuite {
+class JwtServiceTest extends CatsEffectSuite  {
 
   val jwtConfig = JwtConfig(
     secretKey = "test-secret-key-very-long-and-secure-for-testing",
@@ -17,7 +18,7 @@ class JwtServiceTest extends FunSuite {
     refreshTokenExpiration = "30 days"
   )
 
-  val jwtService = new JwtServiceImpl[SyncIO](jwtConfig)
+  val jwtService = new JwtServiceImpl[IO](jwtConfig)
 
   val testUser = User(
     id = UUID.randomUUID(),
@@ -32,40 +33,43 @@ class JwtServiceTest extends FunSuite {
   )
 
   test("generate and validate access token") {
-    (for {
+    for {
       token <- jwtService.generateAccessToken(testUser)
-      claims <- jwtService.validateAndExtractAccessToken(token)
+      cs <- jwtService.validateAndExtractAccessToken(token)
     } yield {
-      assert(claims.isDefined)
-      assertEquals(claims.map(_.userId), Some(testUser.id))
-      assertEquals(claims.map(_.email), Some(testUser.email))
-      assertEquals(claims.map(_.username), Some(testUser.username))
-    }).unsafeRunSync()
+      val claims = cs.value
+      assertEquals(claims.userId, testUser.id)
+      assertEquals(claims.email, testUser.email)
+      assertEquals(claims.username, testUser.username)
+    }
   }
 
   test("generate and validate refresh token") {
-    (for {
+    for {
       token <- jwtService.generateRefreshToken(testUser.id)
-      claims <- jwtService.validateAndExtractRefreshToken(token)
+      cs <- jwtService.validateAndExtractRefreshToken(token)
     } yield {
-      assert(claims.isDefined)
-      assertEquals(claims.map(_.userId), Some(testUser.id))
-      assertEquals(claims.map(_.tokenType), Some("refresh"))
-    }).unsafeRunSync()
+      val claims = cs.value
+      assertEquals(claims.userId, testUser.id)
+      assertEquals(claims.tokenType, "refresh")
+    }
   }
 
   test("fail validation with invalid token") {
-    (for {
-      claims <- jwtService.validateAndExtractAccessToken("invalid.token.here")
-    } yield assertEquals(claims, None)).unsafeRunSync()
+    for {
+      claims <- jwtService.validateAndExtractAccessToken("invalid.token.here").value
+    } yield assert(claims.isLeft)
   }
 
   test("fail validation with wrong secret key") {
-    val wrongJwtService = new JwtServiceImpl[SyncIO](jwtConfig.copy(secretKey = "wrong-key"))
+    val wrongJwtService = new JwtServiceImpl[IO](jwtConfig.copy(secretKey = "wrong-key"))
 
-    (for {
-      token <- jwtService.generateAccessToken(testUser)
-      claims <- wrongJwtService.validateAndExtractAccessToken(token)
-    } yield assertEquals(claims, None)).unsafeRunSync()
+    for {
+      token <- jwtService.generateAccessToken(testUser).value
+      claims <- token match {
+        case Left(value) => fail("Should have failed")
+        case Right(value) => wrongJwtService.validateAndExtractAccessToken(value).value
+      }
+    } yield assert(claims.isLeft)
   }
 }

@@ -57,18 +57,10 @@ case class AuthResponse(
 case class AccessTokenClaims(userId: UUID, email: String, username: String)
 case class RefreshTokenClaims(userId: UUID, tokenType: String = "refresh")
 
-sealed trait ApiError extends Product with Serializable {
-  def message: String
-}
-
-object ApiError {
-
-  case class UserAlreadyExists(email: String, override val message: String = "User with this email already exists")
-      extends ApiError
-  case class InvalidCredentials(override val message: String = "Invalid credentials") extends ApiError
-  case class InvalidRefreshToken(override val message: String = "Invalid refresh token") extends ApiError
-  case class UserNotFound(id: UUID, override val message: String = "User not found") extends ApiError
-  case class InvalidOrExpiredToken(override val message: String = "Invalid or expired token") extends ApiError
-  case class AccountDeactivated(override val message: String = "Account has been deactivated") extends ApiError
-  case class InternalServerError(cause: String, override val message: String = "Internal server error") extends ApiError
-}
+case class UserAlreadyExists(email: String, message: String = "User with this email already exists")
+case class InvalidCredentials(message: String = "Invalid credentials")
+case class InvalidOrExpiredToken(message: String = "Invalid or expired token")
+case class InvalidOrExpiredRefreshToken(message: String = "Invalid refresh token")
+case class UserNotFound(id: UUID, message: String = "User not found")
+case class AccountDeactivated(message: String = "Account has been deactivated")
+case class InternalServerError(cause: String, message: String = "Internal server error")
