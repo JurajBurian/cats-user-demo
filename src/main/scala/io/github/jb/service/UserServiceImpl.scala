@@ -50,19 +50,22 @@ class UserServiceImpl[F[_]: Monad](
     } yield AuthResponse(tokens, toUserResponse(user))
   }
 
-  def getUser(id: UUID): EitherT[F, InternalServerError | UserNotFound, UserResponse] = {
+  def getUser[E](id: UUID): EitherT[F, E | InternalServerError | UserNotFound, UserResponse] = {
     for {
       userOpt <- userRepo.findById(id)
       user <- EitherT.fromOption(userOpt, UserNotFound(id))
     } yield toUserResponse(user)
   }
 
-  def updateUserStatus(id: UUID, isActive: Boolean): EitherT[F, InternalServerError, Boolean] =
+  def updateUserStatus[E](id: UUID, isActive: Boolean): EitherT[F, E | InternalServerError, Boolean] =
     userRepo.updateStatus(id, isActive)
 
-  def validateUserForAccess(
+  def listActiveUsers[E](offset: Long, count: Long): EitherT[F, E | InternalServerError, List[UserResponse]] =
+    userRepo.findActive(offset, count).map(_.map(toUserResponse))
+
+  def validateUserForAccess[E](
       token: String
-  ): EitherT[F, InternalServerError | InvalidOrExpiredToken | AccountDeactivated | UserNotFound, UserResponse] = {
+  ): EitherT[F, E | InternalServerError | InvalidOrExpiredToken | AccountDeactivated | UserNotFound, UserResponse] = {
     for {
       accessClaims <- jwtService.validateAndExtractAccessToken(token)
       userOpt <- userRepo.findById(accessClaims.userId)
@@ -70,9 +73,6 @@ class UserServiceImpl[F[_]: Monad](
       _ <- isActive(user)
     } yield toUserResponse(user)
   }
-
-  def listActiveUsers(offset: Long, count: Long): EitherT[F, InternalServerError, List[UserResponse]] =
-    userRepo.findActive(offset, count).map(_.map(toUserResponse))
 
   private inline def toUserResponse(user: User): UserResponse = {
     UserResponse(

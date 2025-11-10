@@ -11,14 +11,14 @@ import io.github.jb.domain.*
 
 class DoobieUserRepository[F[_]: Async](xa: Transactor[F]) extends UserRepository[F] {
 
-  private def handleDbError[A](fa: F[A]): EitherT[F, InternalServerError, A] = EitherT {
+  private def handleDbError[E, A](fa: F[A]): EitherT[F, E | InternalServerError, A] = EitherT {
     fa.attempt.map {
       case Right(value) => Right(value)
       case Left(ex)     => Left(InternalServerError(ex.getMessage))
     }
   }
 
-  def create(userCreate: UserCreate, passwordHash: String): EitherT[F, InternalServerError, User] =
+  def create[E](userCreate: UserCreate, passwordHash: String): EitherT[F, E| InternalServerError, User] =
     handleDbError {
       sql"""
            |INSERT INTO users (email, username, password_hash, first_name, last_name)
@@ -31,7 +31,7 @@ class DoobieUserRepository[F[_]: Async](xa: Transactor[F]) extends UserRepositor
         .transact(xa)
     }
 
-  def findByEmail(email: String): EitherT[F, InternalServerError, Option[User]] =
+  def findByEmail[E](email: String): EitherT[F, E | InternalServerError, Option[User]] =
     handleDbError {
       sql"""
            |SELECT id, email, username, password_hash, first_name, last_name,
@@ -43,7 +43,7 @@ class DoobieUserRepository[F[_]: Async](xa: Transactor[F]) extends UserRepositor
         .transact(xa)
     }
 
-  def findById(id: UUID): EitherT[F, InternalServerError, Option[User]] =
+  def findById[E](id: UUID): EitherT[F, E | InternalServerError, Option[User]] =
     handleDbError {
       sql"""
            |SELECT id, email, username, password_hash, first_name, last_name,
@@ -55,7 +55,7 @@ class DoobieUserRepository[F[_]: Async](xa: Transactor[F]) extends UserRepositor
         .transact(xa)
     }
 
-  def updateStatus(id: UUID, isActive: Boolean): EitherT[F, InternalServerError, Boolean] =
+  def updateStatus[E](id: UUID, isActive: Boolean): EitherT[F, E | InternalServerError, Boolean] =
     handleDbError {
       sql"""
            |UPDATE users
@@ -65,7 +65,7 @@ class DoobieUserRepository[F[_]: Async](xa: Transactor[F]) extends UserRepositor
         .map(_ > 0)
     }
 
-  def findActive(offset: Long, count: Long): EitherT[F, InternalServerError, List[User]] =
+  def findActive[E](offset: Long, count: Long): EitherT[F, E | InternalServerError, List[User]] =
     handleDbError {
       sql"""
            |SELECT id, email, username, password_hash, first_name, last_name,

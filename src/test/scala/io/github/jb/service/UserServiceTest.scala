@@ -145,7 +145,7 @@ class UserServiceTest extends CatsEffectSuite {
         result <- userService.createUser(userCreate.copy(username = "user2")).value
       } yield {
         result match {
-          case Left(value: UserAlreadyExistsErr) =>
+          case Left(value: UserAlreadyExists) =>
             assertEquals(value.email, "duplicate@example.com")
           case Left(x) =>
             fail(s"Failed with wrong errorr: $x")

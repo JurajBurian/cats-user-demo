@@ -100,7 +100,7 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F]) {
       .serverLogic { case (id, accessToken) =>
         (for {
           _ <- userService.validateUserForAccess(accessToken)
-          user <- userService.getUser(id).flatMap(r => EitherT.pure(r)) // last mapping return all types to the game
+          user <- userService.getUser(id)
         } yield user).value
       }
 
@@ -121,9 +121,7 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F]) {
       .serverLogic { case (id, accessToken, statusUpdate) =>
         (for {
           _ <- userService.validateUserForAccess(accessToken)
-          result <- userService
-            .updateUserStatus(id, statusUpdate.isActive)
-            .flatMap(r => EitherT.pure(r)) // last mapping return all types to the game
+          result <- userService.updateUserStatus(id, statusUpdate.isActive)
         } yield result).value
 
       }
@@ -144,9 +142,7 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F]) {
       .serverLogic { case (offset, count, accessToken) =>
         (for {
           _ <- userService.validateUserForAccess(accessToken)
-          users <- userService
-            .listActiveUsers(offset, count)
-            .flatMap(r => EitherT.pure(r)) // last mapping return all types to the game
+          users <- userService.listActiveUsers(offset, count)
         } yield users).value
       }
 

@@ -5,11 +5,11 @@ import cats.data.EitherT
 import java.util.UUID
 
 trait UserRepository[F[_]] {
-  def create(userCreate: UserCreate, passwordHash: String): EitherT[F, InternalServerError, User]
-  def findByEmail(email: String): EitherT[F, InternalServerError, Option[User]]
-  def findById(id: UUID): EitherT[F, InternalServerError, Option[User]]
-  def updateStatus(id: UUID, isActive: Boolean): EitherT[F, InternalServerError, Boolean]
-  def findActive(offset: Long, count: Long): EitherT[F, InternalServerError, List[User]]
+  def create[E](userCreate: UserCreate, passwordHash: String): EitherT[F, E | InternalServerError, User]
+  def findByEmail[E](email: String): EitherT[F, E | InternalServerError, Option[User]]
+  def findById[E](id: UUID): EitherT[F, E | InternalServerError, Option[User]]
+  def updateStatus[E](id: UUID, isActive: Boolean): EitherT[F, E | InternalServerError, Boolean]
+  def findActive[E](offset: Long, count: Long): EitherT[F, E | InternalServerError, List[User]]
 }
 
 trait JwtService[F[_]] {
@@ -33,10 +33,11 @@ trait UserService[F[_]] {
   def refreshTokens(
       refreshToken: String
   ): EitherT[F, InternalServerError | AccountDeactivated | InvalidOrExpiredRefreshToken | UserNotFound, AuthResponse]
-  def getUser(id: UUID): EitherT[F, InternalServerError | UserNotFound, UserResponse]
-  def updateUserStatus(id: UUID, isActive: Boolean): EitherT[F, InternalServerError, Boolean]
-  def validateUserForAccess(
+
+  def getUser[E](id: UUID): EitherT[F, E | InternalServerError | UserNotFound, UserResponse]
+  def updateUserStatus[E](id: UUID, isActive: Boolean): EitherT[F, E | InternalServerError, Boolean]
+  def listActiveUsers[E](offset: Long, count: Long): EitherT[F, E | InternalServerError, List[UserResponse]]
+  def validateUserForAccess[E](
       token: String
-  ): EitherT[F, InternalServerError | InvalidOrExpiredToken | AccountDeactivated | UserNotFound, UserResponse]
-  def listActiveUsers(offset: Long, count: Long): EitherT[F, InternalServerError, List[UserResponse]]
+  ): EitherT[F, E | InternalServerError | InvalidOrExpiredToken | AccountDeactivated | UserNotFound, UserResponse]
 }
