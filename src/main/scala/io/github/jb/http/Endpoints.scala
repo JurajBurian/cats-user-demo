@@ -6,8 +6,6 @@ import sttp.tapir.generic.auto.*
 import sttp.tapir.json.jsoniter.jsonBody
 import sttp.tapir.server.ServerEndpoint
 import cats.Monad
-import cats.data.EitherT
-import cats.syntax.all.*
 import io.github.jb.domain.*
 import io.github.jb.domain.given
 import sttp.model.StatusCode

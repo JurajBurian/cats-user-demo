@@ -2,7 +2,6 @@ package io.github.jb.service
 
 import cats.Monad
 import cats.data.EitherT
-import cats.syntax.all.*
 import java.util.UUID
 import io.github.jb.domain.*
 
@@ -13,12 +12,12 @@ class UserServiceImpl[F[_]: Monad](
 ) extends UserService[F] {
 
   def createUser(userCreate: UserCreate): EitherT[F, InternalServerError | UserAlreadyExists, UserResponse] = {
-    (for {
+    for {
       existingUser <- userRepo.findByEmail(userCreate.email)
       _ <- EitherT.cond(existingUser.isEmpty, (), UserAlreadyExists(userCreate.email))
       passwordHash <- passwordService.hashPassword(userCreate.password)
-      user <- userRepo.create(userCreate, passwordHash).leftMap(identity[InternalServerError])
-    } yield toUserResponse(user))
+      user <- userRepo.create(userCreate, passwordHash)
+    } yield toUserResponse(user)
   }
 
   def login(
