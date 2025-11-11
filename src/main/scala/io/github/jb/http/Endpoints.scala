@@ -20,22 +20,16 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F]) {
   // Define specific error variants for each ApiError type
   private val invalidCredentialsError =
     oneOfVariant(StatusCode.Unauthorized, jsonBody[InvalidCredentials])
-
   private val invalidRefreshTokenError =
     oneOfVariant(StatusCode.Unauthorized, jsonBody[InvalidOrExpiredRefreshToken])
-
   private val invalidOrExpiredTokenError =
     oneOfVariant(StatusCode.Unauthorized, jsonBody[InvalidOrExpiredToken])
-
   private val accountDeactivatedError =
     oneOfVariant(StatusCode.Forbidden, jsonBody[AccountDeactivated])
-
   private val userNotFoundError =
     oneOfVariant(StatusCode.NotFound, jsonBody[UserNotFound])
-
   private val userAlreadyExistsError =
     oneOfVariant(StatusCode.Conflict, jsonBody[UserAlreadyExists])
-
   private val internalServerError =
     oneOfVariant(StatusCode.InternalServerError, jsonBody[InternalServerError])
 
