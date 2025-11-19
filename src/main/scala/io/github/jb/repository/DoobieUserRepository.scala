@@ -11,9 +11,8 @@ import io.github.jb.domain.*
 
 class DoobieUserRepository[F[_]: Async](xa: Transactor[F]) extends UserRepository[F] {
 
-  // Separate extension methods for better flexibility
   extension [A](fa: F[A])
-    private def attemtDb[E]: EitherT[F, E | InternalServerError, A] =
+    private def attemptDb[E]: EitherT[F, E | InternalServerError, A] =
       fa.attemptT.leftMap(ex => InternalServerError(ex.getMessage))
 
   def create[E](userCreate: UserCreate, passwordHash: String): EitherT[F, E | InternalServerError, User] =
@@ -26,7 +25,7 @@ class DoobieUserRepository[F[_]: Async](xa: Transactor[F]) extends UserRepositor
       .query[User]
       .unique
       .transact(xa)
-      .attemtDb[E]
+      .attemptDb[E]
 
   def findByEmail[E](email: String): EitherT[F, E | InternalServerError, Option[User]] =
     sql"""
@@ -37,7 +36,7 @@ class DoobieUserRepository[F[_]: Async](xa: Transactor[F]) extends UserRepositor
       .query[User]
       .option
       .transact(xa)
-      .attemtDb[E]
+      .attemptDb[E]
 
   def findById[E](id: UUID): EitherT[F, E | InternalServerError, Option[User]] =
     sql"""
@@ -48,7 +47,7 @@ class DoobieUserRepository[F[_]: Async](xa: Transactor[F]) extends UserRepositor
       .query[User]
       .option
       .transact(xa)
-      .attemtDb[E]
+      .attemptDb[E]
 
   def updateStatus[E](id: UUID, isActive: Boolean): EitherT[F, E | InternalServerError, Boolean] =
     sql"""
@@ -56,7 +55,7 @@ class DoobieUserRepository[F[_]: Async](xa: Transactor[F]) extends UserRepositor
          |SET is_active = $isActive, updated_at = CURRENT_TIMESTAMP
          |WHERE id = $id""".stripMargin.update.run
       .transact(xa)
-      .attemtDb[E]
+      .attemptDb[E]
       .map(_ > 0)
 
   def findActive[E](offset: Long, count: Long): EitherT[F, E | InternalServerError, List[User]] =
@@ -70,5 +69,5 @@ class DoobieUserRepository[F[_]: Async](xa: Transactor[F]) extends UserRepositor
       .query[User]
       .to[List]
       .transact(xa)
-      .attemtDb[E]
+      .attemptDb[E]
 }
