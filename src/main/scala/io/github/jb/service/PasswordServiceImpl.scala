@@ -1,10 +1,9 @@
 package io.github.jb.service
 
-import cats.effect.Sync
 import at.favre.lib.crypto.bcrypt.BCrypt
 import cats.Monad
 import cats.data.EitherT
-import io.github.jb.domain.{InternalServerError, PasswordService}
+import io.github.jb.domain.*
 
 class PasswordServiceImpl[F[_]: Monad](cost: Int) extends PasswordService[F] {
 

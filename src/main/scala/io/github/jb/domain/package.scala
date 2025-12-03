@@ -26,12 +26,26 @@ package object domain {
 
   given JsonValueCodec[Boolean] = JsonCodecMaker.make
 
-  given JsonValueCodec[InvalidOrExpiredToken] = JsonCodecMaker.makeOpenapiLike("name")
-  given JsonValueCodec[AccountDeactivated] = JsonCodecMaker.makeOpenapiLike("name")
-  given JsonValueCodec[UserNotFound] = JsonCodecMaker.makeOpenapiLike("name")
-  given JsonValueCodec[UserAlreadyExists] = JsonCodecMaker.makeOpenapiLike("name")
-  given JsonValueCodec[InvalidCredentials] = JsonCodecMaker.makeOpenapiLike("name")
-  given JsonValueCodec[InvalidOrExpiredRefreshToken] = JsonCodecMaker.makeOpenapiLike("name")
-  given JsonValueCodec[InternalServerError] = JsonCodecMaker.makeOpenapiLike("name")
+  given JsonValueCodec[InvalidOrExpiredToken] = JsonCodecMaker.makeOpenapiLike
+
+  given JsonValueCodec[AccountDeactivated] = JsonCodecMaker.makeOpenapiLike
+
+  given JsonValueCodec[UserNotFound] = JsonCodecMaker.makeOpenapiLike
+
+  given JsonValueCodec[UserAlreadyExists] = JsonCodecMaker.makeOpenapiLike
+
+  given JsonValueCodec[InvalidCredentials] = JsonCodecMaker.makeOpenapiLike
+
+  given JsonValueCodec[InvalidOrExpiredRefreshToken] = JsonCodecMaker.makeOpenapiLike
+
+  // given JsonValueCodec[InternalServerError] = JsonCodecMaker.makeOpenapiLike
+
+  given JsonValueCodec[InternalServerError] = new JsonValueCodec[InternalServerError] {
+    override def decodeValue(in: JsonReader, default: InternalServerError): InternalServerError = ???
+
+    override def encodeValue(x: InternalServerError, out: JsonWriter): Unit = ???
+
+    override def nullValue: InternalServerError = ???
+  }
 
 }

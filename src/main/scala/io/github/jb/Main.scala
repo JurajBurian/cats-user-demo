@@ -59,7 +59,6 @@ object Main extends IOApp.Simple {
     }
   }
 
-
   private def createUserService(xa: HikariTransactor[IO], jwt: JwtConfig, bcrypt: BcryptConfig) = {
 
     val userRepo = new DoobieUserRepository[IO](xa)

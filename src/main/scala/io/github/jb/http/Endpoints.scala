@@ -6,13 +6,31 @@ import sttp.tapir.generic.auto.*
 import sttp.tapir.json.jsoniter.jsonBody
 import sttp.tapir.server.ServerEndpoint
 import cats.Monad
-import io.github.jb.domain.*
-import io.github.jb.domain.given
+import io.github.jb.domain.{*, given}
 import sttp.model.StatusCode
 
 import java.util.UUID
 
 class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F]) {
+
+  given Schema[InternalServerError] = Schema(
+    schemaType = SchemaType.SProduct(
+      List(
+        SchemaType.SProductField(
+          FieldName("cause"),
+          Schema.schemaForString.description("Root cause of the error"),
+          (e: InternalServerError) => Some(e.cause)
+        ),
+        SchemaType.SProductField(
+          FieldName("message"),
+          Schema.schemaForString.description("Human readable error message").default("Internal server error"),
+          (e: InternalServerError) => Some(e.message)
+        )
+      )
+    ),
+    name = Some(Schema.SName("InternalServerError")),
+    description = Some("Internal server error response")
+  )
 
   private val basePath = "api" / "v1"
   private val bearerTokenHeader = auth.bearer[String]()

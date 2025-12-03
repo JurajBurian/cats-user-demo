@@ -26,8 +26,8 @@ lazy val root = (project in file("."))
       "com.github.jwt-scala" %% "jwt-core" % "11.0.3",
 
       // JSON
-      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % "2.38.3",
-      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "2.38.3" % Provided,
+      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % "2.38.4",
+      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "2.38.4" % Provided,
 
       // Config
       "com.github.pureconfig" %% "pureconfig-core" % "0.17.9",

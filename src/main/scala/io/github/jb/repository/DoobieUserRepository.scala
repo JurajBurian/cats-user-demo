@@ -13,7 +13,7 @@ class DoobieUserRepository[F[_]: Async](xa: Transactor[F]) extends UserRepositor
 
   extension [A](fa: F[A])
     private def attemptDb[E]: EitherT[F, E | InternalServerError, A] =
-      fa.attemptT.leftMap(ex => InternalServerError(ex.getMessage))
+      fa.attemptT.leftMap(ex => InternalServerError(ex))
 
   def create[E](userCreate: UserCreate, passwordHash: String): EitherT[F, E | InternalServerError, User] =
     sql"""
