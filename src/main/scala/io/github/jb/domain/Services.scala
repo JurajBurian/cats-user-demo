@@ -5,11 +5,11 @@ import cats.data.EitherT
 import java.util.UUID
 
 trait UserRepository[F[_]] {
-  def create[E](userCreate: UserCreate, passwordHash: String): EitherT[F, E | InternalServerError, User]
-  def findByEmail[E](email: String): EitherT[F, E | InternalServerError, Option[User]]
-  def findById[E](id: UUID): EitherT[F, E | InternalServerError, Option[User]]
-  def updateStatus[E](id: UUID, isActive: Boolean): EitherT[F, E | InternalServerError, Boolean]
-  def findActive[E](offset: Long, count: Long): EitherT[F, E | InternalServerError, List[User]]
+  def create[E](userCreate: UserCreate, passwordHash: String): EitherT[F, E | InternalServerErrorWithTh, User]
+  def findByEmail[E](email: String): EitherT[F, E | InternalServerErrorWithTh, Option[User]]
+  def findById[E](id: UUID): EitherT[F, E | InternalServerErrorWithTh, Option[User]]
+  def updateStatus[E](id: UUID, isActive: Boolean): EitherT[F, E | InternalServerErrorWithTh, Boolean]
+  def findActive[E](offset: Long, count: Long): EitherT[F, E | InternalServerErrorWithTh, List[User]]
 }
 
 trait JwtService[F[_]] {
@@ -26,18 +26,22 @@ trait PasswordService[F[_]] {
 }
 
 trait UserService[F[_]] {
-  def createUser(userCreate: UserCreate): EitherT[F, InternalServerError | UserAlreadyExists, UserResponse]
+  def createUser(userCreate: UserCreate): EitherT[F, InternalServerErrorWithTh | UserAlreadyExists | ValidationError, UserResponse]
   def login(
       loginRequest: LoginRequest
-  ): EitherT[F, InternalServerError | AccountDeactivated | InvalidCredentials, AuthResponse]
+  ): EitherT[F, InternalServerErrorWithTh | AccountDeactivated | InvalidCredentials, AuthResponse]
   def refreshTokens(
       refreshToken: String
-  ): EitherT[F, InternalServerError | AccountDeactivated | InvalidOrExpiredRefreshToken | UserNotFound, AuthResponse]
+  ): EitherT[
+    F,
+    InternalServerErrorWithTh | AccountDeactivated | InvalidOrExpiredRefreshToken | UserNotFound,
+    AuthResponse
+  ]
 
-  def getUser[E](id: UUID): EitherT[F, E | InternalServerError | UserNotFound, UserResponse]
-  def updateUserStatus[E](id: UUID, isActive: Boolean): EitherT[F, E | InternalServerError, Boolean]
-  def listActiveUsers[E](offset: Long, count: Long): EitherT[F, E | InternalServerError, List[UserResponse]]
+  def getUser[E](id: UUID): EitherT[F, E | InternalServerErrorWithTh | UserNotFound, UserResponse]
+  def updateUserStatus[E](id: UUID, isActive: Boolean): EitherT[F, E | InternalServerErrorWithTh, Boolean]
+  def listActiveUsers[E](offset: Long, count: Long): EitherT[F, E | InternalServerErrorWithTh, List[UserResponse]]
   def validateUserForAccess[E](
       token: String
-  ): EitherT[F, E | InternalServerError | InvalidOrExpiredToken | AccountDeactivated | UserNotFound, UserResponse]
+  ): EitherT[F, E | InternalServerErrorWithTh | InvalidOrExpiredToken | AccountDeactivated | UserNotFound, UserResponse]
 }

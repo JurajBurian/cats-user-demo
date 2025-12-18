@@ -4,7 +4,6 @@ import cats.effect.IO
 import cats.effect.Resource
 import cats.syntax.all.*
 import munit.CatsEffectSuite
-import com.dimafeng.testcontainers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 import doobie.util.ExecutionContexts
 import doobie.hikari.HikariTransactor
@@ -13,14 +12,15 @@ import org.flywaydb.core.Flyway
 import io.github.jb.domain.*
 import io.github.jb.config.*
 import io.github.jb.repository.DoobieUserRepository
+import org.testcontainers.containers.PostgreSQLContainer
 
 import java.util.UUID
 import scala.concurrent.duration.DurationInt
 
 class UserServiceTest extends CatsEffectSuite {
 
-  lazy val dbContainer: PostgreSQLContainer = {
-    val pg = new PostgreSQLContainer(Some(DockerImageName.parse("postgres:17")))
+  lazy val dbContainer: PostgreSQLContainer[?] = {
+    val pg = new PostgreSQLContainer("postgres:17")
     pg.start()
     pg
   }
@@ -28,9 +28,9 @@ class UserServiceTest extends CatsEffectSuite {
   private lazy val transactorResource: Resource[IO, HikariTransactor[IO]] =
     HikariTransactor.newHikariTransactor[IO](
       "org.postgresql.Driver",
-      dbContainer.jdbcUrl,
-      dbContainer.username,
-      dbContainer.password,
+      dbContainer.getJdbcUrl,
+      dbContainer.getUsername,
+      dbContainer.getPassword,
       ExecutionContexts.synchronous
     )
 
@@ -60,7 +60,7 @@ class UserServiceTest extends CatsEffectSuite {
     // execute migrations
     val flyway = Flyway
       .configure()
-      .dataSource(dbContainer.jdbcUrl, dbContainer.username, dbContainer.password)
+      .dataSource(dbContainer.getJdbcUrl, dbContainer.getUsername, dbContainer.getPassword)
       .locations("classpath:db/migration")
       .load()
     flyway.migrate()
@@ -84,7 +84,7 @@ class UserServiceTest extends CatsEffectSuite {
     val userCreate = UserCreate(
       email = "newuser@example.com",
       username = "newuser",
-      password = "securePassword123",
+      password = "SecurePassword123!",
       firstName = Some("New"),
       lastName = Some("User")
     )
@@ -107,7 +107,7 @@ class UserServiceTest extends CatsEffectSuite {
     val userCreate = UserCreate(
       email = "duplicate@example.com",
       username = "user1",
-      password = "password",
+      password = "SecurePassword123!",
       firstName = None,
       lastName = None
     )
@@ -128,7 +128,7 @@ class UserServiceTest extends CatsEffectSuite {
     val userCreate = UserCreate(
       email = "login@example.com",
       username = "loginuser",
-      password = "correctPassword",
+      password = "SecurePassword123!",
       firstName = None,
       lastName = None
     )
@@ -136,7 +136,7 @@ class UserServiceTest extends CatsEffectSuite {
     // Use flatMap instead of for-comprehension to preserve types
     userService.createUser(userCreate).value.flatMap {
       case Right(_) =>
-        userService.login(LoginRequest("login@example.com", "correctPassword")).value.map {
+        userService.login(LoginRequest("login@example.com", "SecurePassword123!")).value.map {
           case Right(authResponse) =>
             assertEquals(authResponse.user.email, "login@example.com")
             assertEquals(authResponse.user.username, "loginuser")
@@ -153,7 +153,7 @@ class UserServiceTest extends CatsEffectSuite {
     val userCreate = UserCreate(
       email = "login2@example.com",
       username = "loginuser2",
-      password = "correctPassword",
+      password = "SecurePassword123!",
       firstName = None,
       lastName = None
     )
@@ -171,7 +171,7 @@ class UserServiceTest extends CatsEffectSuite {
   }
 
   test("fail login with non-existent email") {
-    userService.login(LoginRequest("nonexistent@example.com", "password")).value.map {
+    userService.login(LoginRequest("nonexistent@example.com", "SecurePassword123!")).value.map {
       case Left(value) =>
         assert(value.isInstanceOf[InvalidCredentials])
       case Right(_) =>
@@ -183,14 +183,14 @@ class UserServiceTest extends CatsEffectSuite {
     val userCreate = UserCreate(
       email = "refresh@example.com",
       username = "refreshuser",
-      password = "password",
+      password = "SecurePassword123!",
       firstName = None,
       lastName = None
     )
 
     userService.createUser(userCreate).value.flatMap {
       case Right(_) =>
-        userService.login(LoginRequest("refresh@example.com", "password")).value.flatMap {
+        userService.login(LoginRequest("refresh@example.com", "SecurePassword123!")).value.flatMap {
           case Right(loginResponse) =>
             IO.sleep(1.second) *>
               userService.refreshTokens(loginResponse.tokens.refreshToken).value.map {
@@ -230,7 +230,7 @@ class UserServiceTest extends CatsEffectSuite {
     val userCreate = UserCreate(
       email = "getuser@example.com",
       username = "getuser",
-      password = "password",
+      password = "SecurePassword123!",
       firstName = Some("Get"),
       lastName = Some("User")
     )
@@ -264,7 +264,7 @@ class UserServiceTest extends CatsEffectSuite {
     val userCreate = UserCreate(
       email = "status@example.com",
       username = "statususer",
-      password = "password",
+      password = "SecurePassword123!",
       firstName = None,
       lastName = None
     )
@@ -292,9 +292,9 @@ class UserServiceTest extends CatsEffectSuite {
 
   test("list active users successfully") {
     val users = List(
-      UserCreate("active1@example.com", "active1", "pass", None, None),
-      UserCreate("active2@example.com", "active2", "pass", None, None),
-      UserCreate("inactive@example.com", "inactive", "pass", None, None)
+      UserCreate("active1@example.com", "active1", "SecurePassword123!", None, None),
+      UserCreate("active2@example.com", "active2", "SecurePassword123!", None, None),
+      UserCreate("inactive@example.com", "inactive", "SecurePassword123!", None, None)
     )
 
     // Create all users sequentially
@@ -323,14 +323,14 @@ class UserServiceTest extends CatsEffectSuite {
     val userCreate = UserCreate(
       email = "validate@example.com",
       username = "validateuser",
-      password = "password",
+      password = "SecurePassword123!",
       firstName = None,
       lastName = None
     )
 
     userService.createUser(userCreate).value.flatMap {
       case Right(_) =>
-        userService.login(LoginRequest("validate@example.com", "password")).value.flatMap {
+        userService.login(LoginRequest("validate@example.com", "SecurePassword123!")).value.flatMap {
           case Right(loginResponse) =>
             userService.validateUserForAccess(loginResponse.tokens.accessToken).value.map {
               case Right(user) =>
@@ -354,11 +354,92 @@ class UserServiceTest extends CatsEffectSuite {
     }
   }
 
+  test("fail to create user with invalid email format") {
+    val userCreate = UserCreate(
+      email = "invalid-email",
+      username = "testuser",
+      password = "SecurePassword123!",
+      firstName = None,
+      lastName = None
+    )
+
+    userService.createUser(userCreate).value.map {
+      case Left(value: ValidationError) =>
+        assert(value.reasons.contains(ValidationErrorReason.InvalidEmailFormat))
+      case Left(x) =>
+        fail(s"Failed with wrong error: $x")
+      case Right(_) =>
+        fail("Should have failed")
+    }
+  }
+
+  test("fail to create user with short username") {
+    val userCreate = UserCreate(
+      email = "test@example.com",
+      username = "abc",
+      password = "SecurePassword123!",
+      firstName = None,
+      lastName = None
+    )
+
+    userService.createUser(userCreate).value.map {
+      case Left(value: ValidationError) =>
+        assert(value.reasons.contains(ValidationErrorReason.UsernameTooShort))
+      case Left(x) =>
+        fail(s"Failed with wrong error: $x")
+      case Right(_) =>
+        fail("Should have failed")
+    }
+  }
+
+  test("fail to create user with weak password") {
+    val userCreate = UserCreate(
+      email = "test@example.com",
+      username = "testuser",
+      password = "weak",
+      firstName = None,
+      lastName = None
+    )
+
+    userService.createUser(userCreate).value.map {
+      case Left(value: ValidationError) =>
+        assert(value.reasons.contains(ValidationErrorReason.PasswordTooShort))
+        assert(value.reasons.contains(ValidationErrorReason.PasswordMissingUppercase))
+        assert(value.reasons.contains(ValidationErrorReason.PasswordMissingNumber))
+        assert(value.reasons.contains(ValidationErrorReason.PasswordMissingSpecialChar))
+      case Left(x) =>
+        fail(s"Failed with wrong error: $x")
+      case Right(_) =>
+        fail("Should have failed")
+    }
+  }
+
+  test("fail to create user with multiple validation errors") {
+    val userCreate = UserCreate(
+      email = "bad-email",
+      username = "ab",
+      password = "weak",
+      firstName = None,
+      lastName = None
+    )
+
+    userService.createUser(userCreate).value.map {
+      case Left(value: ValidationError) =>
+        assert(value.reasons.contains(ValidationErrorReason.InvalidEmailFormat))
+        assert(value.reasons.contains(ValidationErrorReason.UsernameTooShort))
+        assert(value.reasons.contains(ValidationErrorReason.PasswordTooShort))
+      case Left(x) =>
+        fail(s"Failed with wrong error: $x")
+      case Right(_) =>
+        fail("Should have failed")
+    }
+  }
+
   test("fail to validate user access when user is inactive") {
     val userCreate = UserCreate(
       email = "inactive@example.com",
       username = "inactiveuser",
-      password = "password",
+      password = "SecurePassword123!",
       firstName = None,
       lastName = None
     )
@@ -371,7 +452,7 @@ class UserServiceTest extends CatsEffectSuite {
         case Right(value) =>
           userService.updateUserStatus(value.id, isActive = false).value
       }
-      result <- userService.login(LoginRequest("inactive@example.com", "password")).value
+      result <- userService.login(LoginRequest("inactive@example.com", "SecurePassword123!")).value
     } yield {
       assert(result.isLeft)
       result match {

@@ -1,6 +1,8 @@
 package io.github.jb.domain
 
 import io.circe.Codec
+import io.circe.Decoder
+import io.circe.Encoder
 import io.circe.generic.extras.auto.*
 import io.circe.generic.extras.Configuration
 import io.circe.generic.extras.semiauto.*
@@ -35,7 +37,7 @@ object InternalServerErrorWithTh {
     InternalServerErrorWithTh(InternalServerError(cause.getMessage, "InternalServerError"), cause)
 }
 
-enum ValidationErrorReason derives Codec.AsObject {
+enum ValidationErrorReason {
   case InvalidEmailFormat
   case EmailTooShort
   case EmailTooLong
@@ -46,6 +48,19 @@ enum ValidationErrorReason derives Codec.AsObject {
   case PasswordMissingLowercase
   case PasswordMissingNumber
   case PasswordMissingSpecialChar
+}
+
+object ValidationErrorReason {
+  given Codec[ValidationErrorReason] = Codec.from(
+    Decoder.decodeString.emap { str =>
+      try {
+        Right(ValidationErrorReason.valueOf(str))
+      } catch {
+        case _: IllegalArgumentException => Left(s"Unknown validation reason: $str")
+      }
+    },
+    Encoder.encodeString.contramap(_.toString)
+  )
 }
 
 case class ValidationError(reasons: List[ValidationErrorReason], id: String = "ValidationError") extends Err derives Codec.AsObject

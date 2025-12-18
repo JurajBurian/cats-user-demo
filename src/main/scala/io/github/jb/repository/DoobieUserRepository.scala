@@ -12,10 +12,10 @@ import io.github.jb.domain.*
 class DoobieUserRepository[F[_]: Async](xa: Transactor[F]) extends UserRepository[F] {
 
   extension [A](fa: F[A])
-    private def attemptDb[E]: EitherT[F, E | InternalServerError, A] =
-      fa.attemptT.leftMap(ex => InternalServerError(ex))
+    private def attemptDb[E]: EitherT[F, E | InternalServerErrorWithTh, A] =
+      fa.attemptT.leftMap(ex => InternalServerErrorWithTh(ex))
 
-  def create[E](userCreate: UserCreate, passwordHash: String): EitherT[F, E | InternalServerError, User] =
+  def create[E](userCreate: UserCreate, passwordHash: String): EitherT[F, E | InternalServerErrorWithTh, User] =
     sql"""
          |INSERT INTO users (email, username, password_hash, first_name, last_name)
          |VALUES (${userCreate.email}, ${userCreate.username}, $passwordHash,
@@ -27,7 +27,7 @@ class DoobieUserRepository[F[_]: Async](xa: Transactor[F]) extends UserRepositor
       .transact(xa)
       .attemptDb[E]
 
-  def findByEmail[E](email: String): EitherT[F, E | InternalServerError, Option[User]] =
+  def findByEmail[E](email: String): EitherT[F, E | InternalServerErrorWithTh, Option[User]] =
     sql"""
          |SELECT id, email, username, password_hash, first_name, last_name,
          |       is_active, created_at, updated_at
@@ -38,7 +38,7 @@ class DoobieUserRepository[F[_]: Async](xa: Transactor[F]) extends UserRepositor
       .transact(xa)
       .attemptDb[E]
 
-  def findById[E](id: UUID): EitherT[F, E | InternalServerError, Option[User]] =
+  def findById[E](id: UUID): EitherT[F, E | InternalServerErrorWithTh, Option[User]] =
     sql"""
          |SELECT id, email, username, password_hash, first_name, last_name,
          |       is_active, created_at, updated_at
@@ -49,7 +49,7 @@ class DoobieUserRepository[F[_]: Async](xa: Transactor[F]) extends UserRepositor
       .transact(xa)
       .attemptDb[E]
 
-  def updateStatus[E](id: UUID, isActive: Boolean): EitherT[F, E | InternalServerError, Boolean] =
+  def updateStatus[E](id: UUID, isActive: Boolean): EitherT[F, E | InternalServerErrorWithTh, Boolean] =
     sql"""
          |UPDATE users
          |SET is_active = $isActive, updated_at = CURRENT_TIMESTAMP
@@ -58,7 +58,7 @@ class DoobieUserRepository[F[_]: Async](xa: Transactor[F]) extends UserRepositor
       .attemptDb[E]
       .map(_ > 0)
 
-  def findActive[E](offset: Long, count: Long): EitherT[F, E | InternalServerError, List[User]] =
+  def findActive[E](offset: Long, count: Long): EitherT[F, E | InternalServerErrorWithTh, List[User]] =
     sql"""
          |SELECT id, email, username, password_hash, first_name, last_name,
          |       is_active, created_at, updated_at

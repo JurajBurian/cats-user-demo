@@ -3,53 +3,84 @@ package io.github.jb.http
 
 import sttp.tapir.*
 import sttp.tapir.generic.auto.*
-import sttp.tapir.json.jsoniter.jsonBody
+import sttp.tapir.json.circe.jsonBody
 import sttp.tapir.server.ServerEndpoint
 import cats.Monad
-import io.github.jb.domain.{*, given}
+import io.github.jb.*
+import domain.*
 import sttp.model.StatusCode
 
 import java.util.UUID
 
 class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F]) {
 
-  given Schema[InternalServerError] = Schema(
-    schemaType = SchemaType.SProduct(
-      List(
-        SchemaType.SProductField(
-          FieldName("cause"),
-          Schema.schemaForString.description("Root cause of the error"),
-          (e: InternalServerError) => Some(e.cause)
-        ),
-        SchemaType.SProductField(
-          FieldName("message"),
-          Schema.schemaForString.description("Human readable error message").default("Internal server error"),
-          (e: InternalServerError) => Some(e.message)
-        )
-      )
-    ),
-    name = Some(Schema.SName("InternalServerError")),
-    description = Some("Internal server error response")
-  )
-
   private val basePath = "api" / "v1"
   private val bearerTokenHeader = auth.bearer[String]()
 
   // Define specific error variants for each ApiError type
   private val invalidCredentialsError =
-    oneOfVariant(StatusCode.Unauthorized, jsonBody[InvalidCredentials])
+    oneOfVariant(
+      StatusCode.Unauthorized,
+      jsonBody[InvalidCredentials]
+        .description("Invalid email or password credentials provided")
+        .example(InvalidCredentials())
+    )
   private val invalidRefreshTokenError =
-    oneOfVariant(StatusCode.Unauthorized, jsonBody[InvalidOrExpiredRefreshToken])
+    oneOfVariant(
+      StatusCode.Unauthorized,
+      jsonBody[InvalidOrExpiredRefreshToken]
+        .description("Refresh token is invalid, expired, or malformed")
+        .example(InvalidOrExpiredRefreshToken())
+    )
   private val invalidOrExpiredTokenError =
-    oneOfVariant(StatusCode.Unauthorized, jsonBody[InvalidOrExpiredToken])
+    oneOfVariant(
+      StatusCode.Unauthorized,
+      jsonBody[InvalidOrExpiredToken]
+        .description("Access token is invalid, expired, or malformed")
+        .example(InvalidOrExpiredToken())
+    )
   private val accountDeactivatedError =
-    oneOfVariant(StatusCode.Forbidden, jsonBody[AccountDeactivated])
+    oneOfVariant(
+      StatusCode.Forbidden,
+      jsonBody[AccountDeactivated]
+        .description("User account has been deactivated and cannot access the system")
+        .example(AccountDeactivated())
+    )
   private val userNotFoundError =
-    oneOfVariant(StatusCode.NotFound, jsonBody[UserNotFound])
+    oneOfVariant(
+      StatusCode.NotFound,
+      jsonBody[UserNotFound]
+        .description("User with the specified ID was not found")
+        .example(UserNotFound(UUID.randomUUID()))
+    )
   private val userAlreadyExistsError =
-    oneOfVariant(StatusCode.Conflict, jsonBody[UserAlreadyExists])
+    oneOfVariant(
+      StatusCode.Conflict,
+      jsonBody[UserAlreadyExists]
+        .description("User with this email address already exists in the system")
+        .example(UserAlreadyExists("janko.hrasko@hraskovo.com"))
+    )
+  private val validationError = {
+    val allValidationReasons = ValidationErrorReason.values.map(_.toString).mkString(", ")
+    oneOfVariant(
+      StatusCode.BadRequest,
+      jsonBody[io.github.jb.domain.ValidationError]
+        .description(s"Input validation failed. Possible reasons: $allValidationReasons")
+        .example(domain.ValidationError(List(ValidationErrorReason.InvalidEmailFormat)))
+    )
+  }
   private val internalServerError =
-    oneOfVariant(StatusCode.InternalServerError, jsonBody[InternalServerError])
+    oneOfVariant(
+      StatusCode.InternalServerError,
+      jsonBody[InternalServerError]
+        .example(
+          InternalServerError(
+            "HikariPool-1 - Connection is not available, request timed out after 2000ms (total=0, active=0, idle=0, waiting=0"
+          )
+        )
+        .map(body => InternalServerErrorWithTh(body, new RuntimeException(body.cause)))(e => e.body)
+        .description("Unexpected internal server error occurred")
+    )
 
   // Each endpoint specifies exactly which errors it can return
   val loginEndpoint: ServerEndpoint[Any, F] =
@@ -64,6 +95,7 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F]) {
           internalServerError
         )
       )
+      .description("Authenticate user with email and password, return JWT tokens")
       .serverLogic(loginRequest => userService.login(loginRequest).value)
 
   val refreshEndpoint: ServerEndpoint[Any, F] =
@@ -79,6 +111,7 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F]) {
           internalServerError
         )
       )
+      .description("Generate new access token using valid refresh token")
       .serverLogic(refreshToken => userService.refreshTokens(refreshToken).value)
 
   val createUserEndpoint: ServerEndpoint[Any, F] =
@@ -88,10 +121,12 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F]) {
       .out(jsonBody[UserResponse])
       .errorOut(
         oneOf(
+          validationError,
           userAlreadyExistsError,
           internalServerError
         )
       )
+      .description("Create new user account with email, username, and password")
       .serverLogic(userCreate => userService.createUser(userCreate).value)
 
   val getUserEndpoint: ServerEndpoint[Any, F] =
@@ -107,6 +142,7 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F]) {
           internalServerError
         )
       )
+      .description("Retrieve user profile information by user ID")
       .serverLogic { case (id, accessToken) =>
         (for {
           _ <- userService.validateUserForAccess(accessToken)
@@ -128,6 +164,7 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F]) {
           accountDeactivatedError
         )
       )
+      .description("Activate or deactivate user account status")
       .serverLogic { case (id, accessToken, statusUpdate) =>
         (for {
           _ <- userService.validateUserForAccess(accessToken)
@@ -149,6 +186,7 @@ class Endpoints[F[_]](userService: UserService[F])(using M: Monad[F]) {
           userNotFoundError
         )
       )
+      .description("List active users with pagination support")
       .serverLogic { case (offset, count, accessToken) =>
         (for {
           _ <- userService.validateUserForAccess(accessToken)

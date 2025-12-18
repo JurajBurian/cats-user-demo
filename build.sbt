@@ -13,7 +13,7 @@ lazy val root = (project in file("."))
 
       // HTTP Server
       "com.softwaremill.sttp.tapir" %% "tapir-netty-server-cats" % "1.11.49",
-      "com.softwaremill.sttp.tapir" %% "tapir-jsoniter-scala" % "1.11.49",
+      "com.softwaremill.sttp.tapir" %% "tapir-json-circe" % "1.11.49",
       "com.softwaremill.sttp.tapir" %% "tapir-swagger-ui-bundle" % "1.11.49",
 
       // Database
@@ -26,8 +26,10 @@ lazy val root = (project in file("."))
       "com.github.jwt-scala" %% "jwt-core" % "11.0.3",
 
       // JSON
-      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % "2.38.4",
-      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "2.38.4" % Provided,
+      "io.circe" %% "circe-core" % "0.14.15",
+      "io.circe" %% "circe-generic" % "0.14.15",
+      "io.circe" %% "circe-parser" % "0.14.15",
+      "io.circe" %% "circe-generic-extras" % "0.14.5-RC1",
 
       // Config
       "com.github.pureconfig" %% "pureconfig-core" % "0.17.9",
@@ -44,6 +46,6 @@ lazy val root = (project in file("."))
       // Test dependencies
       "org.scalameta" %% "munit" % "1.2.1" % Test,
       "org.typelevel" %% "munit-cats-effect" % "2.1.0" % Test,
-      "com.dimafeng" %% "testcontainers-scala-postgresql" % "0.43.0" % Test
+      "org.testcontainers" % "testcontainers-postgresql" % "2.0.3" % Test
     )
   )

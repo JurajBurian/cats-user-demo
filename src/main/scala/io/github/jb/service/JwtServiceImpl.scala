@@ -4,7 +4,8 @@ import cats.data.EitherT
 import cats.effect.Sync
 import cats.effect.Clock
 import cats.syntax.all.*
-import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString}
+import io.circe.parser._
+import io.circe.syntax._
 
 import java.time.Instant
 import java.util.UUID
@@ -26,7 +27,7 @@ class JwtServiceImpl[F[_]](config: JwtConfig)(using sync: Sync[F], clock: Clock[
         email = user.email,
         username = user.username
       )
-      val jsonClaims = writeToString(claims)
+      val jsonClaims = claims.asJson.noSpaces
 
       val jwtClaims = JwtClaim(
         expiration = Some(now.plusSeconds(15 * 60).getEpochSecond), // 15 minutes
@@ -39,7 +40,7 @@ class JwtServiceImpl[F[_]](config: JwtConfig)(using sync: Sync[F], clock: Clock[
 
   def generateRefreshToken[E](userId: UUID): EitherT[F, E, String] = EitherT.liftF(currentTime.map { now =>
     val claims = RefreshTokenClaims(userId = userId)
-    val jsonClaims = writeToString(claims)
+    val jsonClaims = claims.asJson.noSpaces
     val jwtClaims = JwtClaim(
       expiration = Some(now.plusSeconds(30 * 24 * 60 * 60).getEpochSecond), // 30 days
       issuedAt = Some(now.getEpochSecond),
@@ -56,7 +57,7 @@ class JwtServiceImpl[F[_]](config: JwtConfig)(using sync: Sync[F], clock: Clock[
   def validateAndExtractAccessToken(token: String): EitherT[F, InvalidOrExpiredToken, AccessTokenClaims] =
     if (Jwt.isValid(token, config.secretKey, algorithms)) {
       Jwt.decode(token, config.secretKey, algorithms).toOption.flatMap { claim =>
-        scala.util.Try(readFromString[AccessTokenClaims](claim.content)).toOption
+        decode[AccessTokenClaims](claim.content).toOption
       } match {
         case Some(claims) => EitherT.rightT(claims)
         case None         => EitherT.leftT(InvalidOrExpiredToken())
@@ -68,7 +69,7 @@ class JwtServiceImpl[F[_]](config: JwtConfig)(using sync: Sync[F], clock: Clock[
   def validateAndExtractRefreshToken(token: String): EitherT[F, InvalidOrExpiredRefreshToken, RefreshTokenClaims] =
     if (Jwt.isValid(token, config.secretKey, algorithms)) {
       Jwt.decode(token, config.secretKey, algorithms).toOption.flatMap { claim =>
-        scala.util.Try(readFromString[RefreshTokenClaims](claim.content)).toOption
+        decode[RefreshTokenClaims](claim.content).toOption
       } match {
         case Some(claims) => EitherT.rightT(claims)
         case None         => EitherT.leftT(InvalidOrExpiredRefreshToken())

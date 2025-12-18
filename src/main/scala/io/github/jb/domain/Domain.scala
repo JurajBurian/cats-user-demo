@@ -1,8 +1,9 @@
 package io.github.jb.domain
 
+import io.circe.Codec
+
 import java.util.UUID
 import java.time.Instant
-
 case class User(
     id: UUID,
     email: String,
@@ -21,7 +22,7 @@ case class UserCreate(
     password: String,
     firstName: Option[String],
     lastName: Option[String]
-)
+) derives Codec.AsObject
 
 case class UserResponse(
     id: UUID,
@@ -31,42 +32,26 @@ case class UserResponse(
     lastName: Option[String],
     isActive: Boolean,
     createdAt: Instant
-)
+) derives Codec.AsObject
 
-case class UserStatusUpdate(isActive: Boolean)
+case class UserStatusUpdate(isActive: Boolean) derives Codec.AsObject
 
 case class LoginRequest(
     email: String,
     password: String
-)
+) derives Codec.AsObject
 
 case class Tokens(
     accessToken: String,
     refreshToken: String,
     tokenType: String = "Bearer"
-)
+) derives Codec.AsObject
 
 case class AuthResponse(
     tokens: Tokens,
     user: UserResponse
-)
+) derives Codec.AsObject
 
-case class AccessTokenClaims(userId: UUID, email: String, username: String)
-case class RefreshTokenClaims(userId: UUID, tokenType: String = "refresh")
+case class AccessTokenClaims(userId: UUID, email: String, username: String) derives Codec.AsObject
 
-transparent trait Err {
-  def message: String
-}
-
-case class UserAlreadyExists(email: String, message: String = "User with this email already exists") extends Err
-case class InvalidCredentials(message: String = "Invalid credentials") extends Err
-case class InvalidOrExpiredToken(message: String = "Invalid or expired token") extends Err
-case class InvalidOrExpiredRefreshToken(message: String = "Invalid refresh token") extends Err
-case class UserNotFound(id: UUID, message: String = "User not found") extends Err
-case class AccountDeactivated(message: String = "Account has been deactivated") extends Err
-case class InternalServerError(cause: String, message: String, th: Throwable) extends Err
-
-object InternalServerError {
-  def apply(cause: Throwable): InternalServerError =
-    InternalServerError(cause.getMessage, "Internal server error", cause)
-}
+case class RefreshTokenClaims(userId: UUID, tokenType: String = "refresh") derives Codec.AsObject
